@@ -48,11 +48,11 @@ public class BlogRagService {
       long startedAt = System.currentTimeMillis();
       List<RetrievedChunk> ranked = blogRetriever.retrieve(question);
       if (!hasConfidentMatch(ranked)) {
-        return response(NO_CONFIDENT_MATCH_ANSWER, ranked, "");
+        return response(NO_CONFIDENT_MATCH_ANSWER, ranked, "", "");
       }
       String answer = aiComputeClient.chat(promptBuilder.systemPrompt(), promptBuilder.userPrompt(question, ranked));
       log.info("Answered blog RAG in {} ms with {} chunks", System.currentTimeMillis() - startedAt, ranked.size());
-      return response(answer, ranked, "blog-search");
+      return response(answer, ranked, "blog-search", answer);
     } finally {
       limiter.leave();
     }
@@ -67,7 +67,7 @@ public class BlogRagService {
       List<RetrievedChunk> ranked = blogRetriever.retrieve(question);
       if (!hasConfidentMatch(ranked)) {
         deltaConsumer.accept(NO_CONFIDENT_MATCH_ANSWER);
-        return response(NO_CONFIDENT_MATCH_ANSWER, ranked, "");
+        return response(NO_CONFIDENT_MATCH_ANSWER, ranked, "", "");
       }
       String answer = aiComputeClient.chatStream(
           promptBuilder.systemPrompt(),
@@ -75,7 +75,7 @@ public class BlogRagService {
           deltaConsumer
       );
       log.info("Streamed blog RAG in {} ms with {} chunks", System.currentTimeMillis() - startedAt, ranked.size());
-      return response(answer, ranked, "blog-search");
+      return response(answer, ranked, "blog-search", answer);
     } finally {
       limiter.leave();
     }
@@ -89,11 +89,11 @@ public class BlogRagService {
     return ranked.isEmpty() ? 0 : ranked.get(0).score();
   }
 
-  private ChatResponse response(String answer, List<RetrievedChunk> ranked, String usedSkill) {
+  private ChatResponse response(String answer, List<RetrievedChunk> ranked, String usedSkill, String referenceAnswer) {
     List<String> usedSkills = usedSkill.isBlank() ? List.of() : List.of(usedSkill);
     return new ChatResponse(
         answer,
-        hasConfidentMatch(ranked) ? citationBuilder.build(ranked) : List.of(),
+        hasConfidentMatch(ranked) ? citationBuilder.build(ranked, referenceAnswer) : List.of(),
         hasConfidentMatch(ranked) ? relatedPostBuilder.build(ranked) : List.of(),
         "blog_rag",
         null,
