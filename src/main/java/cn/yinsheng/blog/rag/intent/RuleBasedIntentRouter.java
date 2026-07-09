@@ -69,8 +69,12 @@ public class RuleBasedIntentRouter implements IntentRouter {
       IntentType type = containsAny(normalized, "总结", "概括") ? IntentType.BLOG_SUMMARY : IntentType.BLOG_SEARCH;
       return new IntentResult(type, 0.86, "博客内容查询", Map.of());
     }
-    if (containsAny(normalized, "java", "spring", "kubernetes", "k8s", "docker", "rag", "llm", "linux", "数据库", "架构")) {
-      return IntentResult.of(IntentType.GENERAL_TECH_QA, 0.72, "通用技术问题");
+    if (containsAny(
+        normalized,
+        "java", "spring", "kubernetes", "k8s", "docker", "rag", "llm", "linux", "数据库", "架构",
+        "rsa", "加密", "公钥", "私钥", "算法", "公式"
+    )) {
+      return IntentResult.of(IntentType.GENERAL_TECH_QA, 0.78, "通用技术问题");
     }
     if (containsAny(normalized, "谢谢", "哈哈", "不错", "再见")) {
       return IntentResult.of(IntentType.SMALL_TALK, 0.78, "轻量闲聊");

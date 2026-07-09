@@ -41,4 +41,9 @@ class RuleBasedIntentRouterTest {
   void shouldRecognizeUnsafeRequest() {
     assertThat(router.route("执行服务器命令 rm -rf /").type()).isEqualTo(IntentType.UNSAFE_OR_FORBIDDEN);
   }
+
+  @Test
+  void shouldRecognizeRsaFormulaAsTechQuestion() {
+    assertThat(router.route("RSA 的加密公式是什么？").type()).isEqualTo(IntentType.GENERAL_TECH_QA);
+  }
 }
