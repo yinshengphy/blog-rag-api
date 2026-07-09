@@ -63,7 +63,12 @@ public class WeatherSkill implements Skill {
     String compact = question.replaceAll("\\s+", "")
         .replace("请问", "")
         .replace("帮我查", "")
-        .replace("查询", "");
+        .replace("查询一下", "")
+        .replace("查询", "")
+        .replace("查一下", "")
+        .replace("查查", "")
+        .replace("查", "")
+        .replace("一下", "");
     int keywordIndex = firstKeywordIndex(compact, "下雨", "天气", "气温", "温度", "降雨");
     if (keywordIndex <= 0) {
       return "";
@@ -73,6 +78,7 @@ public class WeatherSkill implements Skill {
         .replace("现在", "")
         .replace("明天", "")
         .replace("会", "")
+        .replace("的", "")
         .trim();
   }
 

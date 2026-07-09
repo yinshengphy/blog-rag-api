@@ -30,6 +30,19 @@ class WeatherSkillTest {
     WeatherSkill skill = new WeatherSkill(city -> new WeatherReport(city, "晴", 20, 0, "mock"));
 
     assertThat(skill.execute(request("今天下雨吗？")).answer()).contains("哪个城市");
+    assertThat(skill.execute(request("查天气")).answer()).contains("哪个城市");
+  }
+
+  @Test
+  void shouldExtractCityAfterLookupVerb() {
+    WeatherProvider provider = mock(WeatherProvider.class);
+    when(provider.currentWeather("上海")).thenReturn(new WeatherReport("上海", "多云", 28.5, 0, "mock"));
+    WeatherSkill skill = new WeatherSkill(provider);
+
+    String answer = skill.execute(request("帮我查一下上海天气")).answer();
+
+    assertThat(answer).contains("上海", "多云");
+    verify(provider).currentWeather("上海");
   }
 
   @Test
