@@ -1,15 +1,20 @@
 package cn.yinsheng.blog.rag.compute;
 
 import cn.yinsheng.blog.rag.config.RagProperties;
+import cn.yinsheng.blog.rag.tool.ToolCall;
+import cn.yinsheng.blog.rag.tool.ToolDefinition;
+import cn.yinsheng.blog.rag.tool.ToolResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -65,6 +70,43 @@ public class AiComputeClient {
     return content.trim();
   }
 
+  public String chatWithTools(
+      String systemPrompt,
+      String userPrompt,
+      List<ToolDefinition> tools,
+      Function<ToolCall, ToolResult> toolExecutor,
+      int maxToolLoops
+  ) {
+    List<Map<String, Object>> messages = new ArrayList<>();
+    messages.add(Map.of("role", "system", "content", systemPrompt));
+    messages.add(Map.of("role", "user", "content", userPrompt));
+    List<Map<String, Object>> openAiTools = tools.stream().map(ToolDefinition::toOpenAiTool).toList();
+    int maxLoops = Math.max(1, Math.min(maxToolLoops, 3));
+    for (int i = 0; i < maxLoops; i++) {
+      JsonNode message = chatCompletion(messages, openAiTools);
+      JsonNode toolCalls = message.path("tool_calls");
+      if (!toolCalls.isArray() || toolCalls.isEmpty()) {
+        String content = message.path("content").asText("");
+        if (content.isBlank()) {
+          throw new IllegalStateException("AI Compute tool chat response is empty");
+        }
+        return content.trim();
+      }
+      messages.add(assistantToolCallMessage(message));
+      for (JsonNode toolCallNode : toolCalls) {
+        ToolCall call = parseToolCall(toolCallNode);
+        ToolResult result = toolExecutor.apply(call);
+        messages.add(Map.of(
+            "role", "tool",
+            "tool_call_id", result.toolCallId(),
+            "name", result.name(),
+            "content", result.content()
+        ));
+      }
+    }
+    throw new IllegalStateException("AI Compute exceeded max tool loop count");
+  }
+
   public String chatStream(String systemPrompt, String userPrompt, Consumer<String> deltaConsumer) {
     StringBuilder answer = new StringBuilder();
     restClient.post()
@@ -113,5 +155,50 @@ public class AiComputeClient {
     if (token != null && !token.isBlank()) {
       headers.setBearerAuth(token);
     }
+  }
+
+  private JsonNode chatCompletion(List<Map<String, Object>> messages, List<Map<String, Object>> tools) {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("model", properties.chatModel());
+    body.put("max_tokens", properties.maxAnswerTokens());
+    body.put("temperature", 0.2);
+    body.put("messages", messages);
+    if (!tools.isEmpty()) {
+      body.put("tools", tools);
+      body.put("tool_choice", "auto");
+    }
+    JsonNode response = restClient.post()
+        .uri(properties.aiComputeBaseUrl() + "/v1/chat/completions")
+        .headers(headers -> setAuth(headers, properties.aiComputeToken()))
+        .body(body)
+        .retrieve()
+        .body(JsonNode.class);
+    JsonNode message = response == null ? null : response.path("choices").path(0).path("message");
+    if (message == null || message.isMissingNode()) {
+      throw new IllegalStateException("AI Compute chat response does not contain a message");
+    }
+    return message;
+  }
+
+  private Map<String, Object> assistantToolCallMessage(JsonNode message) {
+    Map<String, Object> value = new LinkedHashMap<>();
+    value.put("role", "assistant");
+    value.put("content", message.path("content").isMissingNode() ? "" : message.path("content").asText(""));
+    value.put("tool_calls", objectMapper.convertValue(message.path("tool_calls"), List.class));
+    return value;
+  }
+
+  private ToolCall parseToolCall(JsonNode node) {
+    String id = node.path("id").asText("");
+    JsonNode function = node.path("function");
+    String name = function.path("name").asText("");
+    String argumentsJson = function.path("arguments").asText("{}");
+    Map<String, Object> arguments;
+    try {
+      arguments = objectMapper.readValue(argumentsJson, Map.class);
+    } catch (Exception ex) {
+      arguments = Map.of("raw", argumentsJson, "parseError", ex.getMessage());
+    }
+    return new ToolCall(id, name, arguments);
   }
 }

@@ -28,6 +28,44 @@ rag:
   rate-limit-per-minute: ${RATE_LIMIT_PER_MINUTE:10}
   rate-limit-per-day: ${RATE_LIMIT_PER_DAY:100}
 
+assistant:
+  intent:
+    low-confidence-threshold: ${ASSISTANT_INTENT_LOW_CONFIDENCE_THRESHOLD:0.75}
+  max-skill-calls-per-request: ${ASSISTANT_MAX_SKILL_CALLS_PER_REQUEST:3}
+  max-tool-calls-per-request: ${ASSISTANT_MAX_TOOL_CALLS_PER_REQUEST:3}
+  default-zone-id: ${ASSISTANT_DEFAULT_ZONE_ID:Asia/Shanghai}
+  skills:
+    capability:
+      enabled: ${ASSISTANT_SKILL_CAPABILITY_ENABLED:true}
+    joke:
+      enabled: ${ASSISTANT_SKILL_JOKE_ENABLED:true}
+    datetime:
+      enabled: ${ASSISTANT_SKILL_DATETIME_ENABLED:true}
+    calculator:
+      enabled: ${ASSISTANT_SKILL_CALCULATOR_ENABLED:true}
+    unit-convert:
+      enabled: ${ASSISTANT_SKILL_UNIT_CONVERT_ENABLED:true}
+    timestamp:
+      enabled: ${ASSISTANT_SKILL_TIMESTAMP_ENABLED:true}
+    url-codec:
+      enabled: ${ASSISTANT_SKILL_URL_CODEC_ENABLED:true}
+    base64-codec:
+      enabled: ${ASSISTANT_SKILL_BASE64_CODEC_ENABLED:true}
+    weather:
+      enabled: ${ASSISTANT_SKILL_WEATHER_ENABLED:true}
+    blog-search:
+      enabled: ${ASSISTANT_SKILL_BLOG_SEARCH_ENABLED:true}
+    blog-summary:
+      enabled: ${ASSISTANT_SKILL_BLOG_SUMMARY_ENABLED:true}
+
+weather:
+  provider: ${WEATHER_PROVIDER:open-meteo}
+  open-meteo:
+    base-url: ${WEATHER_OPEN_METEO_BASE_URL:https://api.open-meteo.com}
+    geocoding-base-url: ${WEATHER_OPEN_METEO_GEOCODING_BASE_URL:https://geocoding-api.open-meteo.com}
+  amap:
+    key: ${WEATHER_AMAP_KEY:}
+
 management:
   endpoints:
     web:

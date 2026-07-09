@@ -1,8 +1,8 @@
 package cn.yinsheng.blog.rag.api;
 
+import cn.yinsheng.blog.rag.assistant.ChatOrchestrator;
 import cn.yinsheng.blog.rag.chat.ChatBusyException;
 import cn.yinsheng.blog.rag.chat.ChatLimiter;
-import cn.yinsheng.blog.rag.chat.RagChatService;
 import cn.yinsheng.blog.rag.model.ChatRequest;
 import cn.yinsheng.blog.rag.model.ChatResponse;
 import cn.yinsheng.blog.rag.ratelimit.RateLimitExceededException;
@@ -29,13 +29,13 @@ public class ChatController {
   private static final Logger log = LoggerFactory.getLogger(ChatController.class);
   private static final long SSE_TIMEOUT_MS = 180_000L;
 
-  private final RagChatService ragChatService;
+  private final ChatOrchestrator chatOrchestrator;
   private final ChatLimiter chatLimiter;
   private final RateLimitService rateLimitService;
   private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
 
-  public ChatController(RagChatService ragChatService, ChatLimiter chatLimiter, RateLimitService rateLimitService) {
-    this.ragChatService = ragChatService;
+  public ChatController(ChatOrchestrator chatOrchestrator, ChatLimiter chatLimiter, RateLimitService rateLimitService) {
+    this.chatOrchestrator = chatOrchestrator;
     this.chatLimiter = chatLimiter;
     this.rateLimitService = rateLimitService;
   }
@@ -43,7 +43,7 @@ public class ChatController {
   @PostMapping("/api/chat")
   public ChatResponse chat(@Valid @RequestBody ChatRequest request, HttpServletRequest httpRequest) {
     rateLimitService.checkAndRecord(clientIp(httpRequest));
-    return ragChatService.answer(request.question().trim());
+    return chatOrchestrator.answer(request.question().trim());
   }
 
   @PostMapping("/api/chat/stream")
@@ -53,10 +53,11 @@ public class ChatController {
     streamExecutor.execute(() -> {
       long startedAt = System.currentTimeMillis();
       try {
-        emitter.send(SseEmitter.event()
-            .name("meta")
-            .data(Map.of("mode", "blog_rag")));
-        ChatResponse response = ragChatService.streamAnswer(request.question().trim(), delta -> sendDelta(emitter, delta));
+        ChatResponse response = chatOrchestrator.streamAnswer(
+            request.question().trim(),
+            meta -> sendMeta(emitter, meta),
+            delta -> sendDelta(emitter, delta)
+        );
         emitter.send(SseEmitter.event().name("citations").data(response.citations()));
         emitter.send(SseEmitter.event().name("relatedPosts").data(response.relatedPosts()));
         emitter.send(SseEmitter.event()
@@ -100,6 +101,21 @@ public class ChatController {
           .data(Map.of("text", text)));
     } catch (Exception ex) {
       throw new IllegalStateException("Failed to send chat delta", ex);
+    }
+  }
+
+  private void sendMeta(SseEmitter emitter, ChatResponse response) {
+    try {
+      emitter.send(SseEmitter.event()
+          .name("meta")
+          .data(Map.of(
+              "mode", response.mode() == null ? "" : response.mode(),
+              "intent", response.intent() == null ? "" : response.intent(),
+              "usedSkills", response.usedSkills(),
+              "usedTools", response.usedTools()
+          )));
+    } catch (Exception ex) {
+      throw new IllegalStateException("Failed to send chat meta", ex);
     }
   }
 
