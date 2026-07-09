@@ -103,7 +103,7 @@ public class ChatOrchestrator {
       response = route(resolvedQuestion.question(), intent, skillContext);
       updateSessionMemory(sessionId, response);
       metaConsumer.accept(response);
-      deltaConsumer.accept(response.answer());
+      emitAnswerDeltas(response.answer(), deltaConsumer);
       return response;
     } catch (RuntimeException ex) {
       errorCode = ex.getClass().getSimpleName();
@@ -267,6 +267,38 @@ public class ChatOrchestrator {
         ragTopScore,
         errorCode
     );
+  }
+
+  private void emitAnswerDeltas(String answer, Consumer<String> deltaConsumer) {
+    if (answer == null || answer.isBlank()) {
+      return;
+    }
+    int cursor = 0;
+    while (cursor < answer.length()) {
+      int next = nextChunkEnd(answer, cursor);
+      deltaConsumer.accept(answer.substring(cursor, next));
+      cursor = next;
+      pauseBriefly();
+    }
+  }
+
+  private int nextChunkEnd(String answer, int cursor) {
+    int maxEnd = Math.min(answer.length(), cursor + 12);
+    for (int index = cursor + 1; index <= maxEnd; index++) {
+      char value = answer.charAt(index - 1);
+      if ("，。；：、！？,.!? \n".indexOf(value) >= 0) {
+        return index;
+      }
+    }
+    return maxEnd;
+  }
+
+  private void pauseBriefly() {
+    try {
+      Thread.sleep(12);
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+    }
   }
 
   private record ResolvedQuestion(String question, IntentResult intent) {

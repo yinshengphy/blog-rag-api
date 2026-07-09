@@ -7,7 +7,12 @@ import cn.yinsheng.blog.rag.tool.ToolResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -23,11 +28,15 @@ public class AiComputeClient {
   private final RestClient restClient;
   private final RagProperties properties;
   private final ObjectMapper objectMapper;
+  private final HttpClient httpClient;
 
   public AiComputeClient(RestClient restClient, RagProperties properties, ObjectMapper objectMapper) {
     this.restClient = restClient;
     this.properties = properties;
     this.objectMapper = objectMapper;
+    this.httpClient = HttpClient.newBuilder()
+        .connectTimeout(properties.requestTimeout())
+        .build();
   }
 
   public List<Double> embed(String text) {
@@ -109,41 +118,58 @@ public class AiComputeClient {
 
   public String chatStream(String systemPrompt, String userPrompt, Consumer<String> deltaConsumer) {
     StringBuilder answer = new StringBuilder();
-    restClient.post()
-        .uri(properties.aiComputeBaseUrl() + "/v1/chat/completions")
-        .headers(headers -> setAuth(headers, properties.aiComputeToken()))
-        .body(Map.of(
-            "model", properties.chatModel(),
-            "stream", true,
-            "max_tokens", properties.maxAnswerTokens(),
-            "temperature", 0.2,
-            "messages", List.of(
-                Map.of("role", "system", "content", systemPrompt),
-                Map.of("role", "user", "content", userPrompt)
-            )
-        ))
-        .exchange((httpRequest, httpResponse) -> {
-          try (BufferedReader reader = new BufferedReader(
-              new InputStreamReader(httpResponse.getBody(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-              if (!line.startsWith("data:")) {
-                continue;
-              }
-              String data = line.substring("data:".length()).trim();
-              if (data.isBlank() || "[DONE]".equals(data)) {
-                continue;
-              }
-              JsonNode node = objectMapper.readTree(data);
-              String delta = node.path("choices").path(0).path("delta").path("content").asText("");
-              if (!delta.isEmpty()) {
-                answer.append(delta);
-                deltaConsumer.accept(delta);
-              }
-            }
+    Map<String, Object> body = Map.of(
+        "model", properties.chatModel(),
+        "stream", true,
+        "max_tokens", properties.maxAnswerTokens(),
+        "temperature", 0.2,
+        "messages", List.of(
+            Map.of("role", "system", "content", systemPrompt),
+            Map.of("role", "user", "content", userPrompt)
+        )
+    );
+    try {
+      HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+          .uri(URI.create(properties.aiComputeBaseUrl() + "/v1/chat/completions"))
+          .timeout(properties.requestTimeout())
+          .header("Content-Type", "application/json")
+          .header("Accept", "text/event-stream")
+          .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8));
+      if (properties.aiComputeToken() != null && !properties.aiComputeToken().isBlank()) {
+        requestBuilder.header("Authorization", "Bearer " + properties.aiComputeToken());
+      }
+      HttpResponse<java.io.InputStream> response = httpClient.send(
+          requestBuilder.build(),
+          HttpResponse.BodyHandlers.ofInputStream()
+      );
+      if (response.statusCode() < 200 || response.statusCode() >= 300) {
+        throw new IllegalStateException("AI Compute streaming chat failed with status " + response.statusCode());
+      }
+      try (BufferedReader reader = new BufferedReader(
+          new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+        String line;
+        while ((line = reader.readLine()) != null) {
+          if (!line.startsWith("data:")) {
+            continue;
           }
-          return null;
-        });
+          String data = line.substring("data:".length()).trim();
+          if (data.isBlank() || "[DONE]".equals(data)) {
+            continue;
+          }
+          JsonNode node = objectMapper.readTree(data);
+          String delta = node.path("choices").path(0).path("delta").path("content").asText("");
+          if (!delta.isEmpty()) {
+            answer.append(delta);
+            deltaConsumer.accept(delta);
+          }
+        }
+      }
+    } catch (IOException ex) {
+      throw new IllegalStateException("AI Compute streaming chat request failed", ex);
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("AI Compute streaming chat request was interrupted", ex);
+    }
     String value = answer.toString().trim();
     if (value.isBlank()) {
       throw new IllegalStateException("AI Compute streaming chat response is empty");
