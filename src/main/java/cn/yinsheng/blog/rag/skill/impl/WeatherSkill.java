@@ -9,10 +9,14 @@ import cn.yinsheng.blog.rag.skill.SkillRiskLevel;
 import cn.yinsheng.blog.rag.skill.SkillStatus;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class WeatherSkill implements Skill {
+  private static final Logger log = LoggerFactory.getLogger(WeatherSkill.class);
+
   private final WeatherProvider weatherProvider;
 
   public WeatherSkill(WeatherProvider weatherProvider) {
@@ -50,6 +54,7 @@ public class WeatherSkill implements Skill {
           .formatted(report.city(), report.weather(), report.temperatureCelsius(), report.precipitationMm(), rainHint, report.source());
       return SkillResult.answer(answer, Map.of("city", report.city(), "source", report.source()));
     } catch (Exception ex) {
+      log.warn("天气查询失败 city={}", city, ex);
       return SkillResult.answer("我暂时没能查到 " + city + " 的天气数据，请稍后再试或换一个城市名。");
     }
   }
