@@ -30,6 +30,7 @@ public class ChatOrchestrator {
   private final AiComputeClient aiComputeClient;
   private final AssistantProperties properties;
   private final AnswerComposer answerComposer;
+  private final AssistantSessionMemory sessionMemory;
 
   public ChatOrchestrator(
       IntentRouter intentRouter,
@@ -37,7 +38,8 @@ public class ChatOrchestrator {
       BlogRagService blogRagService,
       AiComputeClient aiComputeClient,
       AssistantProperties properties,
-      AnswerComposer answerComposer
+      AnswerComposer answerComposer,
+      AssistantSessionMemory sessionMemory
   ) {
     this.intentRouter = intentRouter;
     this.skillExecutor = skillExecutor;
@@ -45,17 +47,24 @@ public class ChatOrchestrator {
     this.aiComputeClient = aiComputeClient;
     this.properties = properties;
     this.answerComposer = answerComposer;
+    this.sessionMemory = sessionMemory;
   }
 
   public ChatResponse answer(String question) {
+    return answer(question, null);
+  }
+
+  public ChatResponse answer(String question, String sessionId) {
     long startedAt = System.currentTimeMillis();
     String traceId = UUID.randomUUID().toString();
-    IntentResult intent = intentRouter.route(question);
+    ResolvedQuestion resolvedQuestion = resolveQuestion(question, sessionId);
+    IntentResult intent = resolvedQuestion.intent();
     SkillContext skillContext = SkillContext.publicUser(zoneId(), traceId);
     ChatResponse response = null;
     String errorCode = "";
     try {
-      response = route(question, intent, skillContext);
+      response = route(resolvedQuestion.question(), intent, skillContext);
+      updateSessionMemory(sessionId, response);
       return response;
     } catch (RuntimeException ex) {
       errorCode = ex.getClass().getSimpleName();
@@ -67,25 +76,32 @@ public class ChatOrchestrator {
   }
 
   public ChatResponse streamAnswer(String question, Consumer<String> deltaConsumer) {
-    return streamAnswer(question, response -> {
+    return streamAnswer(question, null, response -> {
     }, deltaConsumer);
   }
 
   public ChatResponse streamAnswer(String question, Consumer<ChatResponse> metaConsumer, Consumer<String> deltaConsumer) {
+    return streamAnswer(question, null, metaConsumer, deltaConsumer);
+  }
+
+  public ChatResponse streamAnswer(String question, String sessionId, Consumer<ChatResponse> metaConsumer, Consumer<String> deltaConsumer) {
     long startedAt = System.currentTimeMillis();
     String traceId = UUID.randomUUID().toString();
-    IntentResult intent = intentRouter.route(question);
+    ResolvedQuestion resolvedQuestion = resolveQuestion(question, sessionId);
+    IntentResult intent = resolvedQuestion.intent();
     SkillContext skillContext = SkillContext.publicUser(zoneId(), traceId);
     String errorCode = "";
     ChatResponse response = null;
     try {
       if (isBlogIntent(intent.type())) {
         metaConsumer.accept(simple("", ChatMode.BLOG_RAG, intent));
-        ChatResponse blogResponse = blogRagService.streamAnswer(question, deltaConsumer);
+        ChatResponse blogResponse = blogRagService.streamAnswer(resolvedQuestion.question(), deltaConsumer);
         response = withMetadata(blogResponse, ChatMode.BLOG_RAG, intent, blogResponse.usedSkills(), blogResponse.usedTools(), blogResponse.metadata());
+        updateSessionMemory(sessionId, response);
         return response;
       }
-      response = route(question, intent, skillContext);
+      response = route(resolvedQuestion.question(), intent, skillContext);
+      updateSessionMemory(sessionId, response);
       metaConsumer.accept(response);
       deltaConsumer.accept(response.answer());
       return response;
@@ -129,6 +145,37 @@ public class ChatOrchestrator {
       return new ChatResponse(answer, List.of(), List.of(), ChatMode.GENERAL_TECH.name(), type.name(), List.of(), List.of(), Map.of());
     }
     return simple(answerComposer.fallback(), ChatMode.FALLBACK, intent);
+  }
+
+  private ResolvedQuestion resolveQuestion(String question, String sessionId) {
+    return sessionMemory.pendingSlot(sessionId)
+        .filter(AssistantSessionMemory.PendingSlot::isWeatherCitySlot)
+        .filter(slot -> looksLikeWeatherCityAnswer(question))
+        .map(slot -> new ResolvedQuestion(
+            question + "天气",
+            IntentResult.of(IntentType.WEATHER_QUERY, 0.93, "会话补充天气城市")
+        ))
+        .orElseGet(() -> new ResolvedQuestion(question, intentRouter.route(question)));
+  }
+
+  private boolean looksLikeWeatherCityAnswer(String question) {
+    String value = question == null ? "" : question.trim();
+    if (value.isBlank() || value.length() > 20) {
+      return false;
+    }
+    return !value.matches(".*[?？。!！,，].*");
+  }
+
+  private void updateSessionMemory(String sessionId, ChatResponse response) {
+    if (sessionId == null || sessionId.isBlank() || response == null) {
+      return;
+    }
+    Object pendingSlot = response.metadata().get("pendingSlot");
+    if ("weather.city".equals(pendingSlot)) {
+      sessionMemory.rememberWeatherCitySlot(sessionId);
+      return;
+    }
+    sessionMemory.clear(sessionId);
   }
 
   private boolean isSkillIntent(IntentType type) {
@@ -220,5 +267,8 @@ public class ChatOrchestrator {
         ragTopScore,
         errorCode
     );
+  }
+
+  private record ResolvedQuestion(String question, IntentResult intent) {
   }
 }

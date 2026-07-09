@@ -56,6 +56,20 @@ class AssistantAcceptanceScenarioTest {
   }
 
   @Test
+  void shouldUseSessionContextForWeatherCityClarification() {
+    Fixture fixture = fixture();
+
+    ChatResponse clarification = fixture.orchestrator.answer("查天气", "session-weather");
+    ChatResponse response = fixture.orchestrator.answer("黑龙江", "session-weather");
+
+    assertThat(clarification.answer()).contains("哪个城市");
+    assertThat(response.intent()).isEqualTo("WEATHER_QUERY");
+    assertThat(response.usedSkills()).containsExactly("weather");
+    assertThat(response.answer()).contains("黑龙江", "来源：mock-weather");
+    verify(fixture.blogRagService, never()).answer(anyString());
+  }
+
+  @Test
   void shouldTellShortJokeWithoutBlogRag() {
     Fixture fixture = fixture();
 
@@ -139,7 +153,8 @@ class AssistantAcceptanceScenarioTest {
         blogRagService,
         mock(AiComputeClient.class),
         properties,
-        new AnswerComposer()
+        new AnswerComposer(),
+        new AssistantSessionMemory()
     );
     return new Fixture(orchestrator, blogRagService);
   }

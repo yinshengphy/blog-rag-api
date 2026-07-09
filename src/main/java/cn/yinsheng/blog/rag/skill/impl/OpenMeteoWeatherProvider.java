@@ -25,6 +25,8 @@ public class OpenMeteoWeatherProvider implements WeatherProvider {
       Map.entry("武汉", new CityLocation("武汉", 30.5928, 114.3055)),
       Map.entry("西安", new CityLocation("西安", 34.3416, 108.9398)),
       Map.entry("天津", new CityLocation("天津", 39.3434, 117.3616)),
+      Map.entry("哈尔滨", new CityLocation("哈尔滨", 45.8038, 126.5349)),
+      Map.entry("黑龙江", new CityLocation("黑龙江（哈尔滨）", 45.8038, 126.5349)),
       Map.entry("长沙", new CityLocation("长沙", 28.2282, 112.9388)),
       Map.entry("郑州", new CityLocation("郑州", 34.7466, 113.6254)),
       Map.entry("青岛", new CityLocation("青岛", 36.0671, 120.3826)),

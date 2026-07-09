@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class WeatherSkill implements Skill {
   private static final Logger log = LoggerFactory.getLogger(WeatherSkill.class);
+  private static final String PENDING_WEATHER_CITY_SLOT = "weather.city";
 
   private final WeatherProvider weatherProvider;
 
@@ -45,7 +46,10 @@ public class WeatherSkill implements Skill {
   public SkillResult execute(SkillRequest request) {
     String city = extractCity(request.question());
     if (city.isBlank()) {
-      return SkillResult.answer("你想查询哪个城市的天气？请告诉我城市名。");
+      return SkillResult.answer(
+          "你想查询哪个城市的天气？请告诉我城市名。",
+          Map.of("pendingSlot", PENDING_WEATHER_CITY_SLOT)
+      );
     }
     try {
       WeatherReport report = weatherProvider.currentWeather(city);

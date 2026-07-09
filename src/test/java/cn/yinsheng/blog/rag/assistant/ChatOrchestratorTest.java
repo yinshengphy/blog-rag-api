@@ -34,7 +34,8 @@ class ChatOrchestratorTest {
         blogRagService,
         mock(AiComputeClient.class),
         properties,
-        new AnswerComposer()
+        new AnswerComposer(),
+        new AssistantSessionMemory()
     );
 
     ChatResponse response = orchestrator.answer("123 * 456 等于多少？");

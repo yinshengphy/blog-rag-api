@@ -43,7 +43,7 @@ public class ChatController {
   @PostMapping("/api/chat")
   public ChatResponse chat(@Valid @RequestBody ChatRequest request, HttpServletRequest httpRequest) {
     rateLimitService.checkAndRecord(clientIp(httpRequest));
-    return chatOrchestrator.answer(request.question().trim());
+    return chatOrchestrator.answer(request.question().trim(), request.sessionId());
   }
 
   @PostMapping("/api/chat/stream")
@@ -55,6 +55,7 @@ public class ChatController {
       try {
         ChatResponse response = chatOrchestrator.streamAnswer(
             request.question().trim(),
+            request.sessionId(),
             meta -> sendMeta(emitter, meta),
             delta -> sendDelta(emitter, delta)
         );
