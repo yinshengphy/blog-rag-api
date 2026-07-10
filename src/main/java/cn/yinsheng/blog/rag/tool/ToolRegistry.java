@@ -4,11 +4,16 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ToolRegistry {
   private final Map<String, ToolHandler> handlers = new LinkedHashMap<>();
+
+  public ToolRegistry(List<ToolHandler> handlers) {
+    handlers.forEach(this::register);
+  }
 
   public void register(ToolHandler handler) {
     handlers.put(handler.definition().name(), handler);
@@ -25,6 +30,6 @@ public class ToolRegistry {
   public interface ToolHandler {
     ToolDefinition definition();
 
-    ToolResult execute(ToolCall call);
+    ToolResult execute(ToolCall call, ToolExecutionContext context);
   }
 }

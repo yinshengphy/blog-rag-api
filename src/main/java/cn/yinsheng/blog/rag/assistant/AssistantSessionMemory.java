@@ -1,58 +1,44 @@
 package cn.yinsheng.blog.rag.assistant;
 
-import cn.yinsheng.blog.rag.intent.IntentType;
-import java.time.Duration;
 import java.time.Instant;
-import java.util.Optional;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import org.springframework.stereotype.Component;
 
 @Component
 public class AssistantSessionMemory {
-  private static final Duration TTL = Duration.ofMinutes(15);
-  private static final String WEATHER_CITY_SLOT = "weather.city";
+  private static final int MAX_MESSAGES = 8;
+  private static final long TTL_MINUTES = 20;
+  private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
 
-  private final ConcurrentMap<String, PendingSlot> pendingSlots = new ConcurrentHashMap<>();
-
-  public Optional<PendingSlot> pendingSlot(String sessionId) {
-    if (sessionId == null || sessionId.isBlank()) {
-      return Optional.empty();
+  public List<Map<String, Object>> history(String sessionId) {
+    if (sessionId == null || sessionId.isBlank()) return List.of();
+    SessionState state = sessions.get(sessionId);
+    if (state == null || state.expiresAt().isBefore(Instant.now())) {
+      sessions.remove(sessionId);
+      return List.of();
     }
-    cleanup();
-    PendingSlot slot = pendingSlots.get(sessionId);
-    if (slot == null || slot.isExpired()) {
-      pendingSlots.remove(sessionId);
-      return Optional.empty();
-    }
-    return Optional.of(slot);
+    return List.copyOf(state.messages());
   }
 
-  public void rememberWeatherCitySlot(String sessionId) {
-    if (sessionId == null || sessionId.isBlank()) {
-      return;
+  public void remember(String sessionId, String userMessage, String assistantMessage) {
+    if (sessionId == null || sessionId.isBlank() || assistantMessage == null || assistantMessage.isBlank()) return;
+    List<Map<String, Object>> messages = new ArrayList<>(history(sessionId));
+    messages.add(Map.of("role", "user", "content", userMessage));
+    messages.add(Map.of("role", "assistant", "content", assistantMessage));
+    if (messages.size() > MAX_MESSAGES) {
+      messages = new ArrayList<>(messages.subList(messages.size() - MAX_MESSAGES, messages.size()));
     }
-    pendingSlots.put(sessionId, new PendingSlot(IntentType.WEATHER_QUERY, WEATHER_CITY_SLOT, Instant.now().plus(TTL)));
+    sessions.put(sessionId, new SessionState(List.copyOf(messages), Instant.now().plus(TTL_MINUTES, ChronoUnit.MINUTES)));
   }
 
   public void clear(String sessionId) {
-    if (sessionId == null || sessionId.isBlank()) {
-      return;
-    }
-    pendingSlots.remove(sessionId);
+    if (sessionId != null) sessions.remove(sessionId);
   }
 
-  private void cleanup() {
-    pendingSlots.entrySet().removeIf(entry -> entry.getValue().isExpired());
-  }
-
-  public record PendingSlot(IntentType intentType, String slot, Instant expiresAt) {
-    public boolean isWeatherCitySlot() {
-      return intentType == IntentType.WEATHER_QUERY && WEATHER_CITY_SLOT.equals(slot);
-    }
-
-    private boolean isExpired() {
-      return Instant.now().isAfter(expiresAt);
-    }
+  private record SessionState(List<Map<String, Object>> messages, Instant expiresAt) {
   }
 }

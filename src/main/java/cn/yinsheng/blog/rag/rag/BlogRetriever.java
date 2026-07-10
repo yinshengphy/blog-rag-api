@@ -27,9 +27,13 @@ public class BlogRetriever {
   }
 
   public List<RetrievedChunk> retrieve(String question) {
+    return retrieve(question, null);
+  }
+
+  public List<RetrievedChunk> retrieve(String question, String slug) {
     List<Double> questionVector = aiComputeClient.embed(question);
     int limit = Math.max(properties.topK() * 3, properties.topK());
-    List<RetrievedChunk> retrieved = qdrantClient.search(questionVector, limit);
+    List<RetrievedChunk> retrieved = qdrantClient.search(questionVector, limit, slug);
     return blogReranker.rerank(question, retrieved).stream()
         .limit(properties.topK())
         .toList();

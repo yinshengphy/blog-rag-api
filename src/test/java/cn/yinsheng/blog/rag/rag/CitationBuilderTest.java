@@ -14,6 +14,7 @@ class CitationBuilderTest {
     RetrievedChunk chunk = new RetrievedChunk(
         0.8,
         "rsa-0001",
+        1,
         "rsa",
         "RSA 加密原理",
         "为什么需要 RSA？",

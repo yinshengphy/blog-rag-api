@@ -4,6 +4,7 @@ import java.util.List;
 
 public record ChunkRecord(
     String chunkId,
+    int chunkIndex,
     String slug,
     String title,
     String section,

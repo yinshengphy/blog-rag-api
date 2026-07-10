@@ -99,11 +99,17 @@ public class QdrantClient {
   }
 
   public List<RetrievedChunk> search(List<Double> vector, int limit) {
-    Map<String, Object> body = Map.of(
-        "vector", vector,
-        "limit", limit,
-        "with_payload", true
-    );
+    return search(vector, limit, null);
+  }
+
+  public List<RetrievedChunk> search(List<Double> vector, int limit, String slug) {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("vector", vector);
+    body.put("limit", limit);
+    body.put("with_payload", true);
+    if (slug != null && !slug.isBlank()) {
+      body.put("filter", slugFilter(slug));
+    }
     JsonNode response = restClient.post()
         .uri(collectionUrl() + "/points/search")
         .body(body)
@@ -112,25 +118,53 @@ public class QdrantClient {
 
     List<RetrievedChunk> chunks = new ArrayList<>();
     for (JsonNode result : response.path("result")) {
-      JsonNode payload = result.path("payload");
-      chunks.add(new RetrievedChunk(
-          result.path("score").asDouble(),
-          payload.path("chunk_id").asText(),
-          payload.path("slug").asText(),
-          payload.path("title").asText(),
-          payload.path("section").asText(),
-          payload.path("url").asText(),
-          payload.path("content").asText(),
-          readTags(payload.path("tags")),
-          payload.path("updated_at").asText()
-      ));
+      chunks.add(readChunk(result, result.path("score").asDouble()));
     }
     return chunks;
+  }
+
+  public List<RetrievedChunk> listBySlug(String slug) {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("filter", slugFilter(slug));
+    body.put("limit", 256);
+    body.put("with_payload", true);
+    body.put("with_vector", false);
+    JsonNode response = restClient.post()
+        .uri(collectionUrl() + "/points/scroll")
+        .body(body)
+        .retrieve()
+        .body(JsonNode.class);
+    List<RetrievedChunk> chunks = new ArrayList<>();
+    if (response != null) {
+      for (JsonNode point : response.path("result").path("points")) {
+        chunks.add(readChunk(point, 1));
+      }
+    }
+    return chunks.stream().sorted(java.util.Comparator.comparingInt(RetrievedChunk::chunkIndex)).toList();
+  }
+
+  public List<PostEntry> listPosts() {
+    Map<String, Object> body = Map.of("limit", 1000, "with_payload", true, "with_vector", false);
+    JsonNode response = restClient.post()
+        .uri(collectionUrl() + "/points/scroll")
+        .body(body)
+        .retrieve()
+        .body(JsonNode.class);
+    Map<String, PostEntry> posts = new LinkedHashMap<>();
+    if (response != null) {
+      for (JsonNode point : response.path("result").path("points")) {
+        JsonNode payload = point.path("payload");
+        String slug = payload.path("slug").asText();
+        posts.putIfAbsent(slug, new PostEntry(slug, payload.path("title").asText()));
+      }
+    }
+    return new ArrayList<>(posts.values());
   }
 
   private Map<String, Object> payload(ChunkRecord chunk) {
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("chunk_id", chunk.chunkId());
+    payload.put("chunk_index", chunk.chunkIndex());
     payload.put("slug", chunk.slug());
     payload.put("title", chunk.title());
     payload.put("section", chunk.section());
@@ -151,6 +185,38 @@ public class QdrantClient {
       tags.forEach(tag -> values.add(tag.asText()));
     }
     return values;
+  }
+
+  private Map<String, Object> slugFilter(String slug) {
+    return Map.of("must", List.of(Map.of("key", "slug", "match", Map.of("value", slug))));
+  }
+
+  private RetrievedChunk readChunk(JsonNode point, double score) {
+    JsonNode payload = point.path("payload");
+    return new RetrievedChunk(
+        score,
+        payload.path("chunk_id").asText(),
+        payload.path("chunk_index").asInt(chunkIndex(payload.path("chunk_id").asText())),
+        payload.path("slug").asText(),
+        payload.path("title").asText(),
+        payload.path("section").asText(),
+        payload.path("url").asText(),
+        payload.path("content").asText(),
+        readTags(payload.path("tags")),
+        payload.path("updated_at").asText()
+    );
+  }
+
+  private int chunkIndex(String chunkId) {
+    int separator = chunkId.lastIndexOf('-');
+    try {
+      return separator < 0 ? 0 : Integer.parseInt(chunkId.substring(separator + 1));
+    } catch (NumberFormatException ex) {
+      return 0;
+    }
+  }
+
+  public record PostEntry(String slug, String title) {
   }
 
   private String stablePointId(String chunkId) {

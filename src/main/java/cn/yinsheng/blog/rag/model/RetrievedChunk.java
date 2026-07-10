@@ -5,6 +5,7 @@ import java.util.List;
 public record RetrievedChunk(
     double score,
     String chunkId,
+    int chunkIndex,
     String slug,
     String title,
     String section,

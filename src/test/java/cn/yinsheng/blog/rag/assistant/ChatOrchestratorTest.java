@@ -1,48 +1,83 @@
 package cn.yinsheng.blog.rag.assistant;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cn.yinsheng.blog.rag.compute.AiComputeClient;
 import cn.yinsheng.blog.rag.config.AssistantProperties;
-import cn.yinsheng.blog.rag.intent.IntentResult;
-import cn.yinsheng.blog.rag.intent.IntentRouter;
-import cn.yinsheng.blog.rag.intent.IntentType;
-import cn.yinsheng.blog.rag.model.ChatResponse;
-import cn.yinsheng.blog.rag.rag.BlogRagService;
-import cn.yinsheng.blog.rag.skill.SkillExecutor;
-import cn.yinsheng.blog.rag.skill.SkillRegistry;
-import cn.yinsheng.blog.rag.skill.impl.CalculatorSkill;
+import cn.yinsheng.blog.rag.model.ChatRequest;
+import cn.yinsheng.blog.rag.tool.ToolCall;
+import cn.yinsheng.blog.rag.tool.ToolDefinition;
+import cn.yinsheng.blog.rag.tool.ToolExecutionContext;
+import cn.yinsheng.blog.rag.tool.ToolExecutor;
+import cn.yinsheng.blog.rag.tool.ToolRegistry;
+import cn.yinsheng.blog.rag.tool.ToolResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 
 class ChatOrchestratorTest {
   @Test
-  void shouldRouteNonBlogSkillWithoutCallingBlogRag() {
-    IntentRouter intentRouter = mock(IntentRouter.class);
-    when(intentRouter.route("123 * 456 等于多少？"))
-        .thenReturn(IntentResult.of(IntentType.CALCULATOR, 0.96, "test"));
-    AssistantProperties properties = new AssistantProperties();
-    SkillRegistry registry = new SkillRegistry(List.of(new CalculatorSkill()), properties);
-    BlogRagService blogRagService = mock(BlogRagService.class);
-    ChatOrchestrator orchestrator = new ChatOrchestrator(
-        intentRouter,
-        new SkillExecutor(registry),
-        blogRagService,
-        mock(AiComputeClient.class),
-        properties,
-        new AnswerComposer(),
-        new AssistantSessionMemory()
+  void shouldLetModelAnswerDirectlyWithoutTool() {
+    AiComputeClient ai = mock(AiComputeClient.class);
+    when(ai.streamCompletion(anyList(), anyList(), any())).thenAnswer(invocation -> {
+      Consumer<String> consumer = invocation.getArgument(2);
+      consumer.accept("动态笑话");
+      return new AiComputeClient.AgentTurn("动态笑话", List.of());
+    });
+    ToolRegistry registry = new ToolRegistry(List.of(handler("weather")));
+    ChatOrchestrator orchestrator = orchestrator(ai, registry);
+
+    var response = orchestrator.answer(new ChatRequest("讲个笑话", "s1", null, List.of()));
+
+    assertThat(response.answer()).isEqualTo("动态笑话");
+    assertThat(response.usedTools()).isEmpty();
+    assertThat(response.intent()).isEqualTo("MODEL_ROUTED");
+  }
+
+  @Test
+  void shouldExecuteModelSelectedTool() {
+    AiComputeClient ai = mock(AiComputeClient.class);
+    ToolCall call = new ToolCall("call-1", "weather", Map.of("city", "上海"));
+    when(ai.streamCompletion(anyList(), anyList(), any()))
+        .thenReturn(new AiComputeClient.AgentTurn("", List.of(call)))
+        .thenReturn(new AiComputeClient.AgentTurn("上海当前天气晴。", List.of()));
+    ToolRegistry registry = new ToolRegistry(List.of(handler("weather")));
+    ChatOrchestrator orchestrator = orchestrator(ai, registry);
+
+    var response = orchestrator.answer(new ChatRequest("上海天气如何", "s1", null, List.of()));
+
+    assertThat(response.answer()).contains("上海");
+    assertThat(response.usedTools()).containsExactly("weather");
+  }
+
+  private ChatOrchestrator orchestrator(AiComputeClient ai, ToolRegistry registry) {
+    return new ChatOrchestrator(
+        ai,
+        registry,
+        new ToolExecutor(registry),
+        new AssistantProperties(),
+        new AssistantSessionMemory(),
+        new ObjectMapper()
     );
+  }
 
-    ChatResponse response = orchestrator.answer("123 * 456 等于多少？");
+  private ToolRegistry.ToolHandler handler(String name) {
+    return new ToolRegistry.ToolHandler() {
+      @Override
+      public ToolDefinition definition() {
+        return new ToolDefinition(name, "test", Map.of("type", "object"));
+      }
 
-    assertThat(response.intent()).isEqualTo("CALCULATOR");
-    assertThat(response.usedSkills()).containsExactly("calculator");
-    assertThat(response.answer()).contains("56088");
-    verify(blogRagService, never()).answer(org.mockito.ArgumentMatchers.anyString());
+      @Override
+      public ToolResult execute(ToolCall call, ToolExecutionContext context) {
+        return ToolResult.success(call, "{\"city\":\"上海\",\"weather\":\"晴\"}");
+      }
+    };
   }
 }

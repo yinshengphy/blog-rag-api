@@ -11,7 +11,10 @@ import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.RejectedExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -32,7 +35,14 @@ public class ChatController {
   private final ChatOrchestrator chatOrchestrator;
   private final ChatLimiter chatLimiter;
   private final RateLimitService rateLimitService;
-  private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
+  private final ExecutorService streamExecutor = new ThreadPoolExecutor(
+      4,
+      4,
+      0,
+      TimeUnit.MILLISECONDS,
+      new ArrayBlockingQueue<>(16),
+      new ThreadPoolExecutor.AbortPolicy()
+  );
 
   public ChatController(ChatOrchestrator chatOrchestrator, ChatLimiter chatLimiter, RateLimitService rateLimitService) {
     this.chatOrchestrator = chatOrchestrator;
@@ -43,19 +53,27 @@ public class ChatController {
   @PostMapping("/api/chat")
   public ChatResponse chat(@Valid @RequestBody ChatRequest request, HttpServletRequest httpRequest) {
     rateLimitService.checkAndRecord(clientIp(httpRequest));
-    return chatOrchestrator.answer(request.question().trim(), request.sessionId());
+    if (!chatLimiter.tryEnter()) throw new ChatBusyException("当前请求较多，请稍后再试。");
+    try {
+      return chatOrchestrator.answer(request);
+    } finally {
+      chatLimiter.leave();
+    }
   }
 
   @PostMapping("/api/chat/stream")
   public SseEmitter chatStream(@Valid @RequestBody ChatRequest request, HttpServletRequest httpRequest) {
     rateLimitService.checkAndRecord(clientIp(httpRequest));
     SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
-    streamExecutor.execute(() -> {
+    try {
+      streamExecutor.execute(() -> {
       long startedAt = System.currentTimeMillis();
+      boolean acquired = false;
       try {
+        acquired = chatLimiter.tryEnter();
+        if (!acquired) throw new ChatBusyException("当前请求较多，请稍后再试。");
         ChatResponse response = chatOrchestrator.streamAnswer(
-            request.question().trim(),
-            request.sessionId(),
+            request,
             meta -> sendMeta(emitter, meta),
             delta -> sendDelta(emitter, delta)
         );
@@ -70,8 +88,13 @@ public class ChatController {
       } catch (Exception ex) {
         log.error("RAG stream failed", ex);
         sendError(emitter, HttpStatus.INTERNAL_SERVER_ERROR.value(), "聊天服务暂时不可用，请稍后再试。");
+      } finally {
+        if (acquired) chatLimiter.leave();
       }
-    });
+      });
+    } catch (RejectedExecutionException ex) {
+      sendError(emitter, HttpStatus.TOO_MANY_REQUESTS.value(), "当前请求较多，请稍后再试。");
+    }
     return emitter;
   }
 

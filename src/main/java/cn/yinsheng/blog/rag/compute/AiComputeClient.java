@@ -177,6 +177,76 @@ public class AiComputeClient {
     return value;
   }
 
+  public AgentTurn streamCompletion(
+      List<Map<String, Object>> messages,
+      List<ToolDefinition> tools,
+      Consumer<String> deltaConsumer
+  ) {
+    StringBuilder answer = new StringBuilder();
+    List<ToolCall> toolCalls = new ArrayList<>();
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("model", properties.chatModel());
+    body.put("stream", true);
+    body.put("max_tokens", properties.maxAnswerTokens());
+    body.put("temperature", 0.3);
+    body.put("messages", messages);
+    if (tools != null && !tools.isEmpty()) {
+      body.put("tools", tools.stream().map(ToolDefinition::toOpenAiTool).toList());
+      body.put("tool_choice", "auto");
+    }
+    try {
+      HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+          .uri(URI.create(properties.aiComputeBaseUrl() + "/v1/chat/completions"))
+          .timeout(properties.requestTimeout())
+          .header("Content-Type", "application/json")
+          .header("Accept", "text/event-stream")
+          .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8));
+      if (properties.aiComputeToken() != null && !properties.aiComputeToken().isBlank()) {
+        requestBuilder.header("Authorization", "Bearer " + properties.aiComputeToken());
+      }
+      HttpResponse<java.io.InputStream> response = httpClient.send(
+          requestBuilder.build(),
+          HttpResponse.BodyHandlers.ofInputStream()
+      );
+      if (response.statusCode() < 200 || response.statusCode() >= 300) {
+        throw new IllegalStateException("AI Compute agent stream failed with status " + response.statusCode());
+      }
+      try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+        String line;
+        while ((line = reader.readLine()) != null) {
+          if (!line.startsWith("data:")) {
+            continue;
+          }
+          String data = line.substring("data:".length()).trim();
+          if (data.isBlank() || "[DONE]".equals(data)) {
+            continue;
+          }
+          JsonNode delta = objectMapper.readTree(data).path("choices").path(0).path("delta");
+          String content = delta.path("content").asText("");
+          if (!content.isEmpty()) {
+            answer.append(content);
+            deltaConsumer.accept(content);
+          }
+          JsonNode calls = delta.path("tool_calls");
+          if (calls.isArray()) {
+            for (JsonNode call : calls) {
+              toolCalls.add(parseToolCall(call));
+            }
+          }
+        }
+      }
+    } catch (IOException ex) {
+      throw new IllegalStateException("AI Compute agent streaming request failed", ex);
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("AI Compute agent streaming request was interrupted", ex);
+    }
+    return new AgentTurn(answer.toString().trim(), List.copyOf(toolCalls));
+  }
+
+  public record AgentTurn(String content, List<ToolCall> toolCalls) {
+  }
+
   private void setAuth(org.springframework.http.HttpHeaders headers, String token) {
     if (token != null && !token.isBlank()) {
       headers.setBearerAuth(token);

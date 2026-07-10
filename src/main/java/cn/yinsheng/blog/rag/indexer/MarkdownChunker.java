@@ -24,7 +24,8 @@ public class MarkdownChunker {
     int index = 1;
     for (Section section : sections) {
       for (String content : splitSection(section.content())) {
-        String chunkId = "%s-%04d".formatted(post.slug().replace("/", "-"), index++);
+        int chunkIndex = index++;
+        String chunkId = "%s-%04d".formatted(post.slug().replace("/", "-"), chunkIndex);
         String sectionTitle = section.title().isBlank() ? post.title() : section.title();
         String headingPath = post.title() + " > " + String.join(" > ", section.headingPath());
         String url = "/" + post.slug() + "/#" + slugify(sectionTitle);
@@ -32,6 +33,7 @@ public class MarkdownChunker {
         String chunkHash = sha256(headingPath + "\n" + normalizedContent);
         chunks.add(new ChunkRecord(
             chunkId,
+            chunkIndex,
             post.slug(),
             post.title(),
             sectionTitle,
