@@ -31,7 +31,7 @@ class ChatOrchestratorTest {
       return new AiComputeClient.AgentTurn("动态笑话", List.of());
     });
     ToolRegistry registry = new ToolRegistry(List.of(handler("weather")));
-    ChatOrchestrator orchestrator = orchestrator(ai, registry);
+    ChatOrchestrator orchestrator = orchestrator(ai, registry, new ModelRoutePlanner.RoutePlan(ModelRoutePlanner.Route.DIRECT, Map.of()));
 
     var response = orchestrator.answer(new ChatRequest("讲个笑话", "s1", null, List.of()));
 
@@ -48,7 +48,7 @@ class ChatOrchestratorTest {
         .thenReturn(new AiComputeClient.AgentTurn("", List.of(call)))
         .thenReturn(new AiComputeClient.AgentTurn("上海当前天气晴。", List.of()));
     ToolRegistry registry = new ToolRegistry(List.of(handler("weather")));
-    ChatOrchestrator orchestrator = orchestrator(ai, registry);
+    ChatOrchestrator orchestrator = orchestrator(ai, registry, new ModelRoutePlanner.RoutePlan(ModelRoutePlanner.Route.UNKNOWN, Map.of()));
 
     var response = orchestrator.answer(new ChatRequest("上海天气如何", "s1", null, List.of()));
 
@@ -56,14 +56,17 @@ class ChatOrchestratorTest {
     assertThat(response.usedTools()).containsExactly("weather");
   }
 
-  private ChatOrchestrator orchestrator(AiComputeClient ai, ToolRegistry registry) {
+  private ChatOrchestrator orchestrator(AiComputeClient ai, ToolRegistry registry, ModelRoutePlanner.RoutePlan plan) {
+    ModelRoutePlanner planner = mock(ModelRoutePlanner.class);
+    when(planner.plan(any())).thenReturn(plan);
     return new ChatOrchestrator(
         ai,
         registry,
         new ToolExecutor(registry),
         new AssistantProperties(),
         new AssistantSessionMemory(),
-        new ObjectMapper()
+        new ObjectMapper(),
+        planner
     );
   }
 

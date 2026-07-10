@@ -57,13 +57,21 @@ public class AiComputeClient {
   }
 
   public String chat(String systemPrompt, String userPrompt) {
+    return chat(systemPrompt, userPrompt, properties.maxAnswerTokens(), 0.2);
+  }
+
+  public String classify(String systemPrompt, String userPrompt) {
+    return chat(systemPrompt, userPrompt, 180, 0.0);
+  }
+
+  private String chat(String systemPrompt, String userPrompt, int maxTokens, double temperature) {
     JsonNode response = restClient.post()
         .uri(properties.aiComputeBaseUrl() + "/v1/chat/completions")
         .headers(headers -> setAuth(headers, properties.aiComputeToken()))
         .body(Map.of(
             "model", properties.chatModel(),
-            "max_tokens", properties.maxAnswerTokens(),
-            "temperature", 0.2,
+            "max_tokens", maxTokens,
+            "temperature", temperature,
             "messages", List.of(
                 Map.of("role", "system", "content", systemPrompt),
                 Map.of("role", "user", "content", userPrompt)

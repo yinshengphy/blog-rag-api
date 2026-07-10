@@ -43,6 +43,7 @@ public class ChatOrchestrator {
   private final ToolExecutor toolExecutor;
   private final AssistantProperties properties;
   private final AssistantSessionMemory sessionMemory;
+  private final ModelRoutePlanner routePlanner;
   private final ObjectMapper objectMapper;
   private final String baseSystemPrompt;
 
@@ -52,7 +53,8 @@ public class ChatOrchestrator {
       ToolExecutor toolExecutor,
       AssistantProperties properties,
       AssistantSessionMemory sessionMemory,
-      ObjectMapper objectMapper
+      ObjectMapper objectMapper,
+      ModelRoutePlanner routePlanner
   ) {
     this.aiComputeClient = aiComputeClient;
     this.toolRegistry = toolRegistry;
@@ -60,6 +62,7 @@ public class ChatOrchestrator {
     this.properties = properties;
     this.sessionMemory = sessionMemory;
     this.objectMapper = objectMapper;
+    this.routePlanner = routePlanner;
     this.baseSystemPrompt = loadPrompt();
   }
 
@@ -96,12 +99,31 @@ public class ChatOrchestrator {
     Map<String, Object> metadata = new LinkedHashMap<>();
     String answer = "";
     String errorCode = "";
+    ModelRoutePlanner.RoutePlan routePlan = routePlanner.plan(request);
+    metadata.put("route", routePlan.route().name());
     metaConsumer.accept(response("", "AGENT", usedTools, citations, relatedPosts, metadata));
 
     try {
       int loops = Math.max(1, Math.min(properties.getMaxToolCallsPerRequest(), 5));
+      if (!routePlan.toolName().isBlank()) {
+        Map<String, Object> arguments = new LinkedHashMap<>(routePlan.arguments());
+        arguments.putIfAbsent("query", request.question());
+        ToolCall plannedCall = new ToolCall("planned_" + traceId, routePlan.toolName(), Map.copyOf(arguments));
+        messages.add(assistantToolMessage(new AiComputeClient.AgentTurn("", List.of(plannedCall))));
+        ToolResult result = toolExecutor.execute(
+            plannedCall,
+            new ToolExecutionContext(traceId, request.sessionId(), request.pageContext())
+        );
+        usedTools.add(plannedCall.name());
+        mergeCitations(citations, result.citations());
+        mergeRelatedPosts(relatedPosts, result.relatedPosts());
+        metadata.putAll(result.metadata());
+        messages.add(toolResultMessage(result));
+        metaConsumer.accept(response("", "TOOL", usedTools, citations, relatedPosts, metadata));
+      }
+      boolean nativeToolFallback = routePlan.route() == ModelRoutePlanner.Route.UNKNOWN;
       for (int loop = 0; loop <= loops; loop++) {
-        List<ToolDefinition> availableTools = usedTools.size() >= loops ? List.of() : definitions;
+        List<ToolDefinition> availableTools = nativeToolFallback && usedTools.size() < loops ? definitions : List.of();
         AiComputeClient.AgentTurn turn = aiComputeClient.streamCompletion(messages, availableTools, deltaConsumer);
         if (turn.toolCalls().isEmpty()) {
           answer = turn.content();
