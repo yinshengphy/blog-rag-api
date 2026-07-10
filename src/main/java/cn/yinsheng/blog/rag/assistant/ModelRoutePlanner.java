@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
@@ -23,11 +24,16 @@ public class ModelRoutePlanner {
   }
 
   public RoutePlan plan(ChatRequest request) {
+    return plan(request, List.of());
+  }
+
+  public RoutePlan plan(ChatRequest request, List<Map<String, Object>> history) {
     try {
       String input = objectMapper.writeValueAsString(Map.of(
           "question", request.question(),
           "hasImages", request.images() != null && !request.images().isEmpty(),
-          "currentPage", request.pageContext() == null ? Map.of() : request.pageContext()
+          "currentPage", request.pageContext() == null ? Map.of() : request.pageContext(),
+          "recentConversation", history == null ? List.of() : history
       ));
       String output = aiComputeClient.classify(prompt, input).trim();
       if (output.startsWith("```")) {
@@ -42,7 +48,12 @@ public class ModelRoutePlanner {
       copyText(node, arguments, "focus");
       copyText(node, arguments, "city");
       copyText(node, arguments, "engine");
+      copyText(node, arguments, "category");
       if (node.path("page").canConvertToInt()) arguments.put("page", Math.max(1, node.path("page").asInt(1)));
+      if (route == Route.BLOG_SUMMARY && !arguments.containsKey("target")
+          && (request.pageContext() == null || !request.pageContext().isBlogPost())) {
+        arguments.put("target", request.question().trim());
+      }
       return new RoutePlan(route, Map.copyOf(arguments));
     } catch (Exception ex) {
       return new RoutePlan(Route.UNKNOWN, Map.of());

@@ -20,10 +20,13 @@ public class SearxngSearchProvider implements WebSearchProvider {
   }
 
   @Override
-  public List<WebSearchResult> search(String query, String engine, int page) {
+  public List<WebSearchResult> search(String query, String engine, String category, int page) {
     StringBuilder url = new StringBuilder(properties.getBaseUrl())
         .append("/search?format=json&q=").append(encode(query))
         .append("&pageno=").append(Math.max(1, page));
+    if (category != null && !category.isBlank() && !"general".equalsIgnoreCase(category)) {
+      url.append("&categories=").append(encode(category));
+    }
     if (engine != null && !engine.isBlank() && !"auto".equalsIgnoreCase(engine)) {
       url.append("&engines=").append(encode(engine));
     }

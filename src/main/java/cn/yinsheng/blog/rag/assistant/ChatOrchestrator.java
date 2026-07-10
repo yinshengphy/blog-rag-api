@@ -88,7 +88,8 @@ public class ChatOrchestrator {
     List<ImageAttachment> images = validateImages(request.images());
     List<Map<String, Object>> messages = new ArrayList<>();
     messages.add(Map.of("role", "system", "content", systemPrompt()));
-    messages.addAll(sessionMemory.history(request.sessionId()));
+    List<Map<String, Object>> history = sessionMemory.history(request.sessionId());
+    messages.addAll(history);
     String contextualQuestion = contextualQuestion(request.question(), request.pageContext());
     messages.add(userMessage(contextualQuestion, images));
 
@@ -99,7 +100,7 @@ public class ChatOrchestrator {
     Map<String, Object> metadata = new LinkedHashMap<>();
     String answer = "";
     String errorCode = "";
-    ModelRoutePlanner.RoutePlan routePlan = routePlanner.plan(request);
+    ModelRoutePlanner.RoutePlan routePlan = routePlanner.plan(request, history);
     metadata.put("route", routePlan.route().name());
     metaConsumer.accept(response("", "AGENT", usedTools, citations, relatedPosts, metadata));
 

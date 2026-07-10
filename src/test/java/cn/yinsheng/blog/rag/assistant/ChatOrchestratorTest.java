@@ -58,7 +58,7 @@ class ChatOrchestratorTest {
 
   private ChatOrchestrator orchestrator(AiComputeClient ai, ToolRegistry registry, ModelRoutePlanner.RoutePlan plan) {
     ModelRoutePlanner planner = mock(ModelRoutePlanner.class);
-    when(planner.plan(any())).thenReturn(plan);
+    when(planner.plan(any(), anyList())).thenReturn(plan);
     return new ChatOrchestrator(
         ai,
         registry,

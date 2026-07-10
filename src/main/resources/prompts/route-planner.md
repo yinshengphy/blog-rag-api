@@ -9,14 +9,14 @@ route 只能是：DIRECT、BLOG_QA、BLOG_SUMMARY、WEATHER、WEB_RESEARCH。
 - 当前页面是博客且问题明显指向“这篇、这里、本节、上面内容”时使用 BLOG_QA。
 - 要完整总结当前博客或指定博客时使用 BLOG_SUMMARY。总结用户粘贴的普通文本仍使用 DIRECT。
 - 实时天气、降雨、温度和城市天气使用 WEATHER。
-- 新闻、热点、今天发生的事件、实时资料、外部网页、Google/百度/Bing 搜索或继续搜索使用 WEB_RESEARCH。
+- 新闻、热点、今天发生的事件、实时资料、外部网页、Google/百度/Bing 搜索或继续搜索使用 WEB_RESEARCH。结合 recentConversation 还原“继续、更多、换一个来源”等省略表达，不要把这些词本身当作搜索关键词。
 - 图片描述、OCR、图表解释使用 DIRECT，除非用户同时明确要求搜索外部资料。
 
 参数：
 - BLOG_QA：query 必填；scope 为 CURRENT_POST、SPECIFIED_POST 或 ALL_POSTS；指定文章时填写 target。
-- BLOG_SUMMARY：当前文章时 target 留空；指定文章时填写 target；可填写 focus。
+- BLOG_SUMMARY：当前文章时 target 留空；指定文章时 target 必须填写简洁的文章标题或 slug；可填写 focus。
 - WEATHER：填写 city；用户未提供城市时 city 留空。
-- WEB_RESEARCH：填写 query、engine（auto/google/baidu/bing）和 page。用户说“继续搜索”时结合对话中的上一查询改写 query，并将 page 设为 2。
+- WEB_RESEARCH：填写 query、engine（auto/google/baidu/bing）、category（general/news/it/science）和 page。新闻与热点使用 news；用户说“继续搜索”时结合 recentConversation 中的上一查询改写 query，并将 page 设为 2。
 - DIRECT：只需要 route。
 
 输出示例：
