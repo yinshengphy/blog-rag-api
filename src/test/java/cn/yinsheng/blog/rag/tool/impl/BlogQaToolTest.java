@@ -26,11 +26,13 @@ class BlogQaToolTest {
     BlogQaTool tool = new BlogQaTool(retriever, mock(BlogCatalogService.class), new CitationBuilder(), new RelatedPostBuilder());
 
     var result = tool.execute(
-        new ToolCall("1", "blog_qa", Map.of("query", "名称怎么来的", "scope", "CURRENT_POST")),
+        new ToolCall("1", "blog_qa", Map.of("query", "名称怎么来的", "task", "LOCATE", "scope", "CURRENT_POST")),
         new ToolExecutionContext("trace", "session", new PageContext("BLOG_POST", "rsa", "RSA", "/rsa/", ""))
     );
 
     assertThat(result.success()).isTrue();
+    assertThat(result.content()).startsWith("Task: LOCATE");
+    assertThat(result.metadata()).containsEntry("task", "LOCATE");
     assertThat(result.metadata()).containsEntry("slug", "rsa");
     verify(retriever).retrieve("名称怎么来的", "rsa");
   }

@@ -15,6 +15,6 @@ class PublicToolSetTest {
   @Test
   void shouldExposeExactlyFourPublicTools() {
     assertThat(registry.definitions()).extracting(ToolDefinition::name)
-        .containsExactlyInAnyOrder("blog_qa", "blog_summary", "weather", "web_research");
+        .containsExactlyInAnyOrder("blog_qa", "blog_summary", "weather");
   }
 }

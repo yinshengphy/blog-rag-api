@@ -1,7 +1,6 @@
 package cn.yinsheng.blog.rag.compute;
 
 import cn.yinsheng.blog.rag.config.RagProperties;
-import cn.yinsheng.blog.rag.model.ImageAttachment;
 import cn.yinsheng.blog.rag.tool.ToolCall;
 import cn.yinsheng.blog.rag.tool.ToolDefinition;
 import cn.yinsheng.blog.rag.tool.ToolResult;
@@ -65,24 +64,7 @@ public class AiComputeClient {
     return chat(systemPrompt, userPrompt, 180, 0.0);
   }
 
-  public String classify(String systemPrompt, String userPrompt, List<ImageAttachment> images) {
-    if (images == null || images.isEmpty()) return classify(systemPrompt, userPrompt);
-    List<Map<String, Object>> content = new ArrayList<>();
-    content.add(Map.of("type", "text", "text", userPrompt));
-    for (ImageAttachment image : images) {
-      String url = image.data().startsWith("data:")
-          ? image.data()
-          : "data:" + image.mimeType() + ";base64," + image.data();
-      content.add(Map.of("type", "image_url", "image_url", Map.of("url", url)));
-    }
-    return chat(systemPrompt, content, 220, 0.0);
-  }
-
   private String chat(String systemPrompt, String userPrompt, int maxTokens, double temperature) {
-    return chat(systemPrompt, (Object) userPrompt, maxTokens, temperature);
-  }
-
-  private String chat(String systemPrompt, Object userContent, int maxTokens, double temperature) {
     JsonNode response = restClient.post()
         .uri(properties.aiComputeBaseUrl() + "/v1/chat/completions")
         .headers(headers -> setAuth(headers, properties.aiComputeToken()))
@@ -92,7 +74,7 @@ public class AiComputeClient {
             "temperature", temperature,
             "messages", List.of(
                 Map.of("role", "system", "content", systemPrompt),
-                Map.of("role", "user", "content", userContent)
+                Map.of("role", "user", "content", userPrompt)
             )
         ))
         .retrieve()

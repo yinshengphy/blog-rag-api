@@ -124,9 +124,17 @@ public class QdrantClient {
   }
 
   public List<RetrievedChunk> listBySlug(String slug) {
+    return scrollChunks(slug, 256, 1);
+  }
+
+  public List<RetrievedChunk> listForRetrieval(String slug) {
+    return scrollChunks(slug, 2048, 0);
+  }
+
+  private List<RetrievedChunk> scrollChunks(String slug, int limit, double score) {
     Map<String, Object> body = new LinkedHashMap<>();
-    body.put("filter", slugFilter(slug));
-    body.put("limit", 256);
+    if (slug != null && !slug.isBlank()) body.put("filter", slugFilter(slug));
+    body.put("limit", limit);
     body.put("with_payload", true);
     body.put("with_vector", false);
     JsonNode response = restClient.post()
@@ -137,7 +145,7 @@ public class QdrantClient {
     List<RetrievedChunk> chunks = new ArrayList<>();
     if (response != null) {
       for (JsonNode point : response.path("result").path("points")) {
-        chunks.add(readChunk(point, 1));
+        chunks.add(readChunk(point, score));
       }
     }
     return chunks.stream().sorted(java.util.Comparator.comparingInt(RetrievedChunk::chunkIndex)).toList();

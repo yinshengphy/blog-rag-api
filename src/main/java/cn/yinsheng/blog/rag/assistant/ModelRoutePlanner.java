@@ -31,13 +31,10 @@ public class ModelRoutePlanner {
     try {
       String input = objectMapper.writeValueAsString(Map.of(
           "question", request.question(),
-          "hasImages", request.images() != null && !request.images().isEmpty(),
           "currentPage", request.pageContext() == null ? Map.of() : request.pageContext(),
           "recentConversation", history == null ? List.of() : history
       ));
-      String output = request.images() == null || request.images().isEmpty()
-          ? aiComputeClient.classify(prompt, input).trim()
-          : aiComputeClient.classify(prompt, input, request.images()).trim();
+      String output = aiComputeClient.classify(prompt, input).trim();
       if (output.startsWith("```")) {
         output = output.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
       }
@@ -45,13 +42,12 @@ public class ModelRoutePlanner {
       Route route = Route.valueOf(node.path("route").asText("UNKNOWN").toUpperCase());
       Map<String, Object> arguments = new LinkedHashMap<>();
       copyText(node, arguments, "query");
+      copyText(node, arguments, "task");
       copyText(node, arguments, "scope");
       copyText(node, arguments, "target");
       copyText(node, arguments, "focus");
       copyText(node, arguments, "city");
-      copyText(node, arguments, "engine");
-      copyText(node, arguments, "category");
-      if (node.path("page").canConvertToInt()) arguments.put("page", Math.max(1, node.path("page").asInt(1)));
+      applyBlogDefaults(route, arguments, request);
       if (route == Route.BLOG_SUMMARY && !arguments.containsKey("target")
           && (request.pageContext() == null || !request.pageContext().isBlogPost())) {
         arguments.put("target", request.question().trim());
@@ -59,6 +55,34 @@ public class ModelRoutePlanner {
       return new RoutePlan(route, Map.copyOf(arguments));
     } catch (Exception ex) {
       return new RoutePlan(Route.UNKNOWN, Map.of());
+    }
+  }
+
+  private void applyBlogDefaults(Route route, Map<String, Object> arguments, ChatRequest request) {
+    switch (route) {
+      case BLOG_CURRENT_QA -> {
+        arguments.put("task", "ANSWER");
+        arguments.put("scope", "CURRENT_POST");
+      }
+      case BLOG_SITE_QA -> {
+        arguments.put("task", "ANSWER");
+        arguments.put("scope", "ALL_POSTS");
+      }
+      case BLOG_LOCATE -> {
+        arguments.put("task", "LOCATE");
+        arguments.putIfAbsent("scope", request.pageContext() != null && request.pageContext().isBlogPost()
+            ? "CURRENT_POST" : "ALL_POSTS");
+      }
+      case BLOG_SEARCH -> {
+        arguments.put("task", "SEARCH");
+        arguments.put("scope", "ALL_POSTS");
+      }
+      case BLOG_RECOMMEND -> {
+        arguments.put("task", "RECOMMEND");
+        arguments.put("scope", "ALL_POSTS");
+      }
+      default -> {
+      }
     }
   }
 
@@ -76,21 +100,26 @@ public class ModelRoutePlanner {
   }
 
   public enum Route {
-    DIRECT,
-    BLOG_QA,
+    DIRECT_PERSONA,
+    DIRECT_GENERAL,
+    BLOG_CURRENT_QA,
+    BLOG_SITE_QA,
+    BLOG_LOCATE,
+    BLOG_SEARCH,
+    BLOG_RECOMMEND,
     BLOG_SUMMARY,
     WEATHER,
-    WEB_RESEARCH,
+    CLARIFICATION,
+    UNSUPPORTED,
     UNKNOWN
   }
 
   public record RoutePlan(Route route, Map<String, Object> arguments) {
     public String toolName() {
       return switch (route) {
-        case BLOG_QA -> "blog_qa";
+        case BLOG_CURRENT_QA, BLOG_SITE_QA, BLOG_LOCATE, BLOG_SEARCH, BLOG_RECOMMEND -> "blog_qa";
         case BLOG_SUMMARY -> "blog_summary";
         case WEATHER -> "weather";
-        case WEB_RESEARCH -> "web_research";
         default -> "";
       };
     }

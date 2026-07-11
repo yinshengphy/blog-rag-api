@@ -5,7 +5,6 @@ import cn.yinsheng.blog.rag.config.AssistantProperties;
 import cn.yinsheng.blog.rag.model.ChatRequest;
 import cn.yinsheng.blog.rag.model.ChatResponse;
 import cn.yinsheng.blog.rag.model.Citation;
-import cn.yinsheng.blog.rag.model.ImageAttachment;
 import cn.yinsheng.blog.rag.model.PageContext;
 import cn.yinsheng.blog.rag.model.RelatedPost;
 import cn.yinsheng.blog.rag.tool.ToolCall;
@@ -17,7 +16,6 @@ import cn.yinsheng.blog.rag.tool.ToolResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,11 +31,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class ChatOrchestrator {
   private static final Logger log = LoggerFactory.getLogger(ChatOrchestrator.class);
-  private static final Set<String> IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
-  private static final int MAX_IMAGES = 3;
-  private static final int MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-  private static final int MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024;
-
   private final AiComputeClient aiComputeClient;
   private final ToolRegistry toolRegistry;
   private final ToolExecutor toolExecutor;
@@ -71,7 +64,7 @@ public class ChatOrchestrator {
   }
 
   public ChatResponse answer(String question, String sessionId) {
-    return answer(new ChatRequest(question, sessionId, null, List.of()));
+    return answer(new ChatRequest(question, sessionId, null));
   }
 
   public ChatResponse answer(String question) {
@@ -85,13 +78,12 @@ public class ChatOrchestrator {
   ) {
     long startedAt = System.currentTimeMillis();
     String traceId = UUID.randomUUID().toString();
-    List<ImageAttachment> images = validateImages(request.images());
     List<Map<String, Object>> messages = new ArrayList<>();
     messages.add(Map.of("role", "system", "content", systemPrompt()));
     List<Map<String, Object>> history = sessionMemory.history(request.sessionId());
     messages.addAll(history);
     String contextualQuestion = contextualQuestion(request.question(), request.pageContext());
-    messages.add(userMessage(contextualQuestion, images));
+    messages.add(Map.of("role", "user", "content", contextualQuestion));
 
     List<ToolDefinition> definitions = toolRegistry.definitions().stream().toList();
     List<String> usedTools = new ArrayList<>();
@@ -156,12 +148,12 @@ public class ChatOrchestrator {
       throw ex;
     } finally {
       log.info(
-          "assistant_request traceId={} mode={} usedTools={} latencyMs={} imageCount={} pageSlug={} errorCode={}",
+          "assistant_request traceId={} intent={} mode={} usedTools={} latencyMs={} pageSlug={} errorCode={}",
           traceId,
+          routePlan.route(),
           usedTools.isEmpty() ? "DIRECT" : "TOOL",
           usedTools,
           System.currentTimeMillis() - startedAt,
-          images.size(),
           request.pageContext() == null ? "" : request.pageContext().slug(),
           errorCode
       );
@@ -169,7 +161,7 @@ public class ChatOrchestrator {
   }
 
   public ChatResponse streamAnswer(String question, String sessionId, Consumer<ChatResponse> metaConsumer, Consumer<String> deltaConsumer) {
-    return streamAnswer(new ChatRequest(question, sessionId, null, List.of()), metaConsumer, deltaConsumer);
+    return streamAnswer(new ChatRequest(question, sessionId, null), metaConsumer, deltaConsumer);
   }
 
   public ChatResponse streamAnswer(String question, Consumer<ChatResponse> metaConsumer, Consumer<String> deltaConsumer) {
@@ -195,45 +187,6 @@ public class ChatOrchestrator {
     } catch (Exception ex) {
       return question.trim();
     }
-  }
-
-  private Map<String, Object> userMessage(String text, List<ImageAttachment> images) {
-    if (images.isEmpty()) return Map.of("role", "user", "content", text);
-    List<Map<String, Object>> content = new ArrayList<>();
-    content.add(Map.of("type", "text", "text", text));
-    for (ImageAttachment image : images) {
-      content.add(Map.of("type", "image_url", "image_url", Map.of("url", dataUrl(image))));
-    }
-    return Map.of("role", "user", "content", content);
-  }
-
-  private String dataUrl(ImageAttachment image) {
-    if (image.data().startsWith("data:")) return image.data();
-    return "data:" + image.mimeType() + ";base64," + image.data();
-  }
-
-  private List<ImageAttachment> validateImages(List<ImageAttachment> images) {
-    if (images == null || images.isEmpty()) return List.of();
-    if (images.size() > MAX_IMAGES) throw new IllegalArgumentException("Too many images");
-    int total = 0;
-    List<ImageAttachment> valid = new ArrayList<>();
-    for (ImageAttachment image : images) {
-      if (image == null || !IMAGE_TYPES.contains(image.mimeType()) || image.data() == null) {
-        throw new IllegalArgumentException("Unsupported image");
-      }
-      String base64 = image.data().contains(",") ? image.data().substring(image.data().indexOf(',') + 1) : image.data();
-      byte[] decoded;
-      try {
-        decoded = Base64.getDecoder().decode(base64.getBytes(StandardCharsets.US_ASCII));
-      } catch (Exception ex) {
-        throw new IllegalArgumentException("Invalid image data", ex);
-      }
-      if (decoded.length > MAX_IMAGE_BYTES) throw new IllegalArgumentException("Image is too large");
-      total += decoded.length;
-      valid.add(image);
-    }
-    if (total > MAX_TOTAL_IMAGE_BYTES) throw new IllegalArgumentException("Total image size is too large");
-    return List.copyOf(valid);
   }
 
   private Map<String, Object> assistantToolMessage(AiComputeClient.AgentTurn turn) {
@@ -291,7 +244,8 @@ public class ChatOrchestrator {
       List<RelatedPost> relatedPosts,
       Map<String, Object> metadata
   ) {
-    return new ChatResponse(answer, List.copyOf(citations), List.copyOf(relatedPosts), mode, "MODEL_ROUTED", List.of(), List.copyOf(usedTools), Map.copyOf(metadata));
+    String intent = String.valueOf(metadata.getOrDefault("route", "UNKNOWN"));
+    return new ChatResponse(answer, List.copyOf(citations), List.copyOf(relatedPosts), mode, intent, List.of(), List.copyOf(usedTools), Map.copyOf(metadata));
   }
 
   private String loadPrompt() {

@@ -34,20 +34,22 @@ public class BlogQaTool implements ToolRegistry.ToolHandler {
 
   @Override
   public ToolDefinition definition() {
-    return new ToolDefinition("blog_qa", "Search and answer from this site's blog. Use CURRENT_POST for references to this/current article, SPECIFIED_POST for a named article, and ALL_POSTS for site-wide questions.", Map.of(
+    return new ToolDefinition("blog_qa", "Answer, search, locate, or recommend strictly from this site's indexed blog evidence.", Map.of(
         "type", "object",
         "properties", Map.of(
             "query", Map.of("type", "string"),
+            "task", Map.of("type", "string", "enum", List.of("ANSWER", "SEARCH", "LOCATE", "RECOMMEND")),
             "scope", Map.of("type", "string", "enum", List.of("CURRENT_POST", "SPECIFIED_POST", "ALL_POSTS")),
             "target", Map.of("type", "string")
         ),
-        "required", List.of("query", "scope")
+        "required", List.of("query", "task", "scope")
     ));
   }
 
   @Override
   public ToolResult execute(ToolCall call, ToolExecutionContext context) {
     String query = stringArg(call, "query");
+    String task = normalizedTask(stringArg(call, "task"));
     String scope = stringArg(call, "scope");
     String slug = resolveSlug(scope, stringArg(call, "target"), context.pageContext());
     if ("__missing_current__".equals(slug)) {
@@ -65,7 +67,7 @@ public class BlogQaTool implements ToolRegistry.ToolHandler {
     }
     List<Citation> citations = citationBuilder.build(chunks, "");
     List<RelatedPost> related = relatedPostBuilder.build(chunks);
-    StringBuilder content = new StringBuilder();
+    StringBuilder content = new StringBuilder(taskInstruction(task));
     for (int i = 0; i < chunks.size(); i++) {
       RetrievedChunk chunk = chunks.get(i);
       content.append("[Source ").append(i + 1).append("]\n")
@@ -76,9 +78,26 @@ public class BlogQaTool implements ToolRegistry.ToolHandler {
     }
     Map<String, Object> metadata = new LinkedHashMap<>();
     metadata.put("ragTopScore", chunks.get(0).score());
+    metadata.put("task", task);
     metadata.put("scope", scope);
     if (slug != null) metadata.put("slug", slug);
     return ToolResult.success(call, content.toString(), citations, related, metadata);
+  }
+
+  private String normalizedTask(String value) {
+    return switch (value.toUpperCase(java.util.Locale.ROOT)) {
+      case "SEARCH", "LOCATE", "RECOMMEND" -> value.toUpperCase(java.util.Locale.ROOT);
+      default -> "ANSWER";
+    };
+  }
+
+  private String taskInstruction(String task) {
+    return switch (task) {
+      case "LOCATE" -> "Task: LOCATE\nFirst state the exact blog title and section. Use the Source URL as a clickable citation. Quote only the minimum text needed.\n\n";
+      case "SEARCH" -> "Task: SEARCH\nFirst answer whether the site contains this topic, then list only supported matching posts and their relevant sections.\n\n";
+      case "RECOMMEND" -> "Task: RECOMMEND\nRecommend unique posts only. Explain each recommendation from its evidence and do not treat multiple chunks as multiple posts.\n\n";
+      default -> "Task: ANSWER\nAnswer the question directly from evidence. If evidence does not support a detail, say so instead of adding it.\n\n";
+    };
   }
 
   private String resolveSlug(String scope, String target, PageContext pageContext) {

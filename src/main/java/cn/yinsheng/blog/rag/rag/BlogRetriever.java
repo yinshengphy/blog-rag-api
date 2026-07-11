@@ -4,7 +4,9 @@ import cn.yinsheng.blog.rag.compute.AiComputeClient;
 import cn.yinsheng.blog.rag.config.RagProperties;
 import cn.yinsheng.blog.rag.model.RetrievedChunk;
 import cn.yinsheng.blog.rag.qdrant.QdrantClient;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -34,7 +36,14 @@ public class BlogRetriever {
     List<Double> questionVector = aiComputeClient.embed(question);
     int limit = Math.max(properties.topK() * 3, properties.topK());
     List<RetrievedChunk> retrieved = qdrantClient.search(questionVector, limit, slug);
-    return blogReranker.rerank(question, retrieved).stream()
+    Map<String, RetrievedChunk> candidates = new LinkedHashMap<>();
+    retrieved.forEach(chunk -> candidates.put(chunk.chunkId(), chunk));
+    for (RetrievedChunk chunk : qdrantClient.listForRetrieval(slug)) {
+      if (blogReranker.lexicalScore(question, chunk) >= 0.08) {
+        candidates.putIfAbsent(chunk.chunkId(), chunk);
+      }
+    }
+    return blogReranker.rerank(question, candidates.values().stream().toList()).stream()
         .limit(properties.topK())
         .toList();
   }

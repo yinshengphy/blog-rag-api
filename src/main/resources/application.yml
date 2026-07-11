@@ -8,7 +8,7 @@ spring:
 rag:
   ai-compute-base-url: ${AI_COMPUTE_BASE_URL:http://ai-compute-gateway.ai.svc.cluster.local:8080}
   ai-compute-token: ${AI_COMPUTE_API_TOKEN:}
-  chat-model: ${RAG_CHAT_MODEL:huihui_ai/qwen3-vl-abliterated:4b-instruct}
+  chat-model: ${RAG_CHAT_MODEL:huihui-qwen3:4b-instruct-2507-abliterated-q4_K_M}
   embedding-model: ${RAG_EMBEDDING_MODEL:bge-m3}
   qdrant-url: ${QDRANT_URL:http://qdrant:6333}
   qdrant-collection: ${QDRANT_COLLECTION:blog_chunks}
@@ -39,12 +39,6 @@ weather:
   amap:
     key: ${WEATHER_AMAP_KEY:}
 
-web-search:
-  base-url: ${WEB_SEARCH_BASE_URL:http://searxng.ai.svc.cluster.local:8080}
-  result-limit: ${WEB_SEARCH_RESULT_LIMIT:6}
-  fetch-limit: ${WEB_SEARCH_FETCH_LIMIT:3}
-  max-page-bytes: ${WEB_SEARCH_MAX_PAGE_BYTES:1000000}
-  timeout-seconds: ${WEB_SEARCH_TIMEOUT_SECONDS:10}
 
 management:
   endpoints:

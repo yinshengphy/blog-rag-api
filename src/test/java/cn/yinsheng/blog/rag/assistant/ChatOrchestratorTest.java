@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cn.yinsheng.blog.rag.compute.AiComputeClient;
@@ -31,13 +32,13 @@ class ChatOrchestratorTest {
       return new AiComputeClient.AgentTurn("动态笑话 [1]", List.of());
     });
     ToolRegistry registry = new ToolRegistry(List.of(handler("weather")));
-    ChatOrchestrator orchestrator = orchestrator(ai, registry, new ModelRoutePlanner.RoutePlan(ModelRoutePlanner.Route.DIRECT, Map.of()));
+    ChatOrchestrator orchestrator = orchestrator(ai, registry, new ModelRoutePlanner.RoutePlan(ModelRoutePlanner.Route.DIRECT_GENERAL, Map.of()));
 
-    var response = orchestrator.answer(new ChatRequest("讲个笑话", "s1", null, List.of()));
+    var response = orchestrator.answer(new ChatRequest("讲个笑话", "s1", null));
 
     assertThat(response.answer()).isEqualTo("动态笑话");
     assertThat(response.usedTools()).isEmpty();
-    assertThat(response.intent()).isEqualTo("MODEL_ROUTED");
+    assertThat(response.intent()).isEqualTo("DIRECT_GENERAL");
   }
 
   @Test
@@ -50,10 +51,31 @@ class ChatOrchestratorTest {
     ToolRegistry registry = new ToolRegistry(List.of(handler("weather")));
     ChatOrchestrator orchestrator = orchestrator(ai, registry, new ModelRoutePlanner.RoutePlan(ModelRoutePlanner.Route.UNKNOWN, Map.of()));
 
-    var response = orchestrator.answer(new ChatRequest("上海天气如何", "s1", null, List.of()));
+    var response = orchestrator.answer(new ChatRequest("上海天气如何", "s1", null));
 
     assertThat(response.answer()).contains("上海");
     assertThat(response.usedTools()).containsExactly("weather");
+  }
+
+  @Test
+  void shouldOnlyExecutePlannedBlogToolForCurrentPostQuestion() {
+    AiComputeClient ai = mock(AiComputeClient.class);
+    when(ai.streamCompletion(anyList(), anyList(), any()))
+        .thenReturn(new AiComputeClient.AgentTurn("答案 [1]", List.of()));
+    ToolRegistry.ToolHandler blogQa = handler("blog_qa");
+    ToolRegistry.ToolHandler weather = handler("weather");
+    ToolRegistry registry = new ToolRegistry(List.of(blogQa, weather));
+    var plan = new ModelRoutePlanner.RoutePlan(
+        ModelRoutePlanner.Route.BLOG_CURRENT_QA,
+        Map.of("task", "ANSWER", "scope", "CURRENT_POST")
+    );
+    ChatOrchestrator orchestrator = orchestrator(ai, registry, plan);
+
+    var response = orchestrator.answer(new ChatRequest("这一节说了什么", "s1", null));
+
+    assertThat(response.intent()).isEqualTo("BLOG_CURRENT_QA");
+    assertThat(response.usedTools()).containsExactly("blog_qa");
+    verify(ai).streamCompletion(anyList(), org.mockito.ArgumentMatchers.argThat(List::isEmpty), any());
   }
 
   private ChatOrchestrator orchestrator(AiComputeClient ai, ToolRegistry registry, ModelRoutePlanner.RoutePlan plan) {
