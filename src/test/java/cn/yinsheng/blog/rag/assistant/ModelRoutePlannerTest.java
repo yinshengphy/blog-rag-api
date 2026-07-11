@@ -2,11 +2,13 @@ package cn.yinsheng.blog.rag.assistant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import cn.yinsheng.blog.rag.compute.AiComputeClient;
 import cn.yinsheng.blog.rag.model.ChatRequest;
+import cn.yinsheng.blog.rag.model.ImageAttachment;
 import cn.yinsheng.blog.rag.model.PageContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -48,5 +50,24 @@ class ModelRoutePlannerTest {
 
     assertThat(plan.route()).isEqualTo(ModelRoutePlanner.Route.BLOG_SUMMARY);
     assertThat(plan.arguments()).containsEntry("target", "完整总结 RSA 那篇博客");
+  }
+
+  @Test
+  void shouldUseImageContentToBuildWebSearchQuery() {
+    AiComputeClient ai = mock(AiComputeClient.class);
+    when(ai.classify(anyString(), anyString(), anyList())).thenReturn("""
+        {"route":"WEB_RESEARCH","query":"Qwen3 VL 多模态模型","engine":"auto","category":"general","page":1}
+        """);
+    ModelRoutePlanner planner = new ModelRoutePlanner(ai, new ObjectMapper());
+
+    var plan = planner.plan(new ChatRequest(
+        "搜索这张图的相关资料",
+        "s1",
+        null,
+        List.of(new ImageAttachment("image/jpeg", "AA==", "model.jpg"))
+    ));
+
+    assertThat(plan.route()).isEqualTo(ModelRoutePlanner.Route.WEB_RESEARCH);
+    assertThat(plan.arguments()).containsEntry("query", "Qwen3 VL 多模态模型");
   }
 }

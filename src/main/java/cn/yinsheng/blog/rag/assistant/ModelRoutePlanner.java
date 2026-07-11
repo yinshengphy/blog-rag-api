@@ -35,7 +35,9 @@ public class ModelRoutePlanner {
           "currentPage", request.pageContext() == null ? Map.of() : request.pageContext(),
           "recentConversation", history == null ? List.of() : history
       ));
-      String output = aiComputeClient.classify(prompt, input).trim();
+      String output = request.images() == null || request.images().isEmpty()
+          ? aiComputeClient.classify(prompt, input).trim()
+          : aiComputeClient.classify(prompt, input, request.images()).trim();
       if (output.startsWith("```")) {
         output = output.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
       }
