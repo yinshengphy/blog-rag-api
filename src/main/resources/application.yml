@@ -15,7 +15,7 @@ rag:
   embedding-dimension: ${EMBEDDING_DIMENSION:1024}
   top-k: ${RAG_TOP_K:3}
   max-context-chars: ${RAG_MAX_CONTEXT_CHARS:8000}
-  max-answer-tokens: ${RAG_MAX_ANSWER_TOKENS:600}
+    max-answer-tokens: ${RAG_MAX_ANSWER_TOKENS:900}
   chat-concurrency: ${CHAT_CONCURRENCY:1}
   chat-queue-timeout-ms: ${CHAT_QUEUE_TIMEOUT_MS:30000}
   request-timeout-seconds: ${REQUEST_TIMEOUT_SECONDS:120}
