@@ -24,6 +24,14 @@ import org.junit.jupiter.api.Test;
 
 class ChatOrchestratorTest {
   @Test
+  void shouldRemoveModelWrittenCitationLinksButKeepInlineMarkers() {
+    String answer = "结论见正文 [1]。\n\n[1] /rsa/#实际使用中的-rsa\n[2] https://example.com/source";
+
+    assertThat(ChatOrchestrator.sanitizeCitationMarkers(answer, 2))
+        .isEqualTo("结论见正文 [1]。");
+  }
+
+  @Test
   void shouldLetModelAnswerDirectlyWithoutTool() {
     AiComputeClient ai = mock(AiComputeClient.class);
     when(ai.streamCompletion(anyList(), anyList(), any())).thenAnswer(invocation -> {

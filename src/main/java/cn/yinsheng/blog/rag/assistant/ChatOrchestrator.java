@@ -235,11 +235,15 @@ public class ChatOrchestrator {
     try { return objectMapper.writeValueAsString(value); } catch (Exception ex) { return "{}"; }
   }
 
-  private String sanitizeCitationMarkers(String answer, int citationCount) {
-    return java.util.regex.Pattern.compile("\\[(\\d+)]").matcher(answer).replaceAll(match -> {
+  static String sanitizeCitationMarkers(String answer, int citationCount) {
+    String withoutManualLinks = java.util.regex.Pattern
+        .compile("(?m)^\\s*\\[\\d+]\\s+(?:https?://\\S+|/\\S+)\\s*$")
+        .matcher(answer)
+        .replaceAll("");
+    return java.util.regex.Pattern.compile("\\[(\\d+)]").matcher(withoutManualLinks).replaceAll(match -> {
       int index = Integer.parseInt(match.group(1));
       return index >= 1 && index <= citationCount ? match.group() : "";
-    }).replaceAll("[ \\t]+(?=\\r?$)", "").trim();
+    }).replaceAll("(?m)[ \\t]+$", "").replaceAll("\\n{3,}", "\\n\\n").trim();
   }
 
   private void mergeCitations(List<Citation> target, List<Citation> values) {

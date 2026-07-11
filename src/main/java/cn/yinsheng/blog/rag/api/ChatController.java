@@ -97,7 +97,10 @@ public class ChatController {
         emitter.send(SseEmitter.event().name("relatedPosts").data(response.relatedPosts()));
         emitter.send(SseEmitter.event()
             .name("done")
-            .data(Map.of("elapsedMs", System.currentTimeMillis() - startedAt)));
+            .data(Map.of(
+                "answer", response.answer(),
+                "elapsedMs", System.currentTimeMillis() - startedAt
+            )));
         finished.set(true);
         emitter.complete();
       } catch (ChatBusyException ex) {
