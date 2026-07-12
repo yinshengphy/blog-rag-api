@@ -40,6 +40,10 @@ public class ModelRoutePlanner {
       }
       JsonNode node = objectMapper.readTree(output);
       Route route = Route.valueOf(node.path("route").asText("UNKNOWN").toUpperCase());
+      if (route == Route.BLOG_CURRENT_QA
+          && (request.pageContext() == null || !request.pageContext().isBlogPost())) {
+        route = Route.BLOG_SITE_QA;
+      }
       Map<String, Object> arguments = new LinkedHashMap<>();
       copyText(node, arguments, "query");
       copyText(node, arguments, "task");

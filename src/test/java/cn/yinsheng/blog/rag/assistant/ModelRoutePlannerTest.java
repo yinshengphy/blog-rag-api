@@ -35,6 +35,26 @@ class ModelRoutePlannerTest {
   }
 
   @Test
+  void shouldUseSiteScopeWhenCurrentBlogRouteHasNoCurrentPost() {
+    AiComputeClient ai = mock(AiComputeClient.class);
+    when(ai.classify(anyString(), anyString())).thenReturn("""
+        {"route":"BLOG_CURRENT_QA","query":"刚发的随笔讲了什么"}
+        """);
+    ModelRoutePlanner planner = new ModelRoutePlanner(ai, new ObjectMapper());
+
+    var plan = planner.plan(new ChatRequest(
+        "刚发的随笔讲了什么",
+        "s1",
+        new PageContext("HOME", "", "", "/", "")
+    ));
+
+    assertThat(plan.route()).isEqualTo(ModelRoutePlanner.Route.BLOG_SITE_QA);
+    assertThat(plan.arguments())
+        .containsEntry("scope", "ALL_POSTS")
+        .containsEntry("task", "ANSWER");
+  }
+
+  @Test
   void shouldApplyLocateDefaultsFromCurrentPage() {
     AiComputeClient ai = mock(AiComputeClient.class);
     when(ai.classify(anyString(), anyString())).thenReturn("""
