@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: blog-rag-api
+    name: blog-service
 
 rag:
   ai-compute-base-url: ${AI_COMPUTE_BASE_URL:http://ai-compute-gateway.ai.svc.cluster.local:8080}
@@ -22,7 +22,7 @@ rag:
   content-dir: ${BLOG_CONTENT_DIR:/app/content/posts}
   index-db-path: ${INDEX_DB_PATH:/data/blog-indexer/index-status.db}
   indexer-batch-size: ${INDEXER_BATCH_SIZE:6}
-  indexer-chat-status-url: ${INDEXER_CHAT_STATUS_URL:http://blog-rag-api.blog.svc.cluster.local:8080/internal/status}
+  indexer-chat-status-url: ${INDEXER_CHAT_STATUS_URL:http://blog-service.blog.svc.cluster.local:8080/internal/status}
   index-api-token: ${INDEX_API_TOKEN:}
   site-base-path: ${SITE_BASE_PATH:/}
   rate-limit-db-path: ${RATE_LIMIT_DB_PATH:/data/rate-limit.db}

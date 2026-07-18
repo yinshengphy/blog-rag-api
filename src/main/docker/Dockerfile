@@ -7,5 +7,5 @@ RUN mvn -B -DskipTests package
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-COPY --from=build /workspace/target/blog-rag-api-*.jar /app/blog-rag-api.jar
-ENTRYPOINT ["java", "-jar", "/app/blog-rag-api.jar"]
+COPY --from=build /workspace/target/blog-service-*.jar /app/blog-service.jar
+ENTRYPOINT ["java", "-jar", "/app/blog-service.jar"]

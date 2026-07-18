@@ -12,9 +12,9 @@
   </parent>
 
   <groupId>cn.yinsheng.blog</groupId>
-  <artifactId>blog-rag-api</artifactId>
+  <artifactId>blog-service</artifactId>
   <version>0.1.0</version>
-  <name>blog-rag-api</name>
+  <name>blog-service</name>
 
   <properties>
     <java.version>17</java.version>
@@ -77,7 +77,7 @@
             <image>m.daocloud.io/docker.io/library/eclipse-temurin:17-jre</image>
           </from>
           <to>
-            <image>localhost:5000/blog-rag-api:latest</image>
+            <image>localhost:5000/blog-service:latest</image>
           </to>
           <container>
             <ports>

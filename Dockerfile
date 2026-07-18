@@ -6,5 +6,5 @@ RUN mvn -B -DskipTests package
 
 FROM m.daocloud.io/docker.io/library/eclipse-temurin:17-jre
 WORKDIR /app
-COPY --from=build /workspace/target/blog-rag-api-0.1.0.jar /app/app.jar
+COPY --from=build /workspace/target/blog-service-0.1.0.jar /app/app.jar
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

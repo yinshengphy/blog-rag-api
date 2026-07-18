@@ -1,4 +1,4 @@
-name: 构建 Blog RAG API
+name: 构建博客服务
 
 permissions:
   contents: read
@@ -22,14 +22,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: blog-rag-api-build-${{ github.ref }}
+  group: blog-service-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on:
       - self-hosted
-      - blog-rag-api
+      - blog-service
     timeout-minutes: 20
     defaults:
       run:
@@ -177,11 +177,11 @@ jobs:
         run: |
           mvn -B -DskipTests \
             -Dmaven.repo.local="$PWD/.runner-cache/m2" \
-            -Djib.to.image="ghcr.io/yinshengphy/blog-rag-api:${IMAGE_TAG}" \
+            -Djib.to.image="ghcr.io/yinshengphy/blog-service:${IMAGE_TAG}" \
             -Djib.to.auth.username="$GHCR_USER" \
             -Djib.to.auth.password="$GHCR_TOKEN" \
             jib:build
-          echo "已发布 ghcr.io/yinshengphy/blog-rag-api:${IMAGE_TAG}"
+          echo "已发布 ghcr.io/yinshengphy/blog-service:${IMAGE_TAG}"
 
       - name: 更新生产环境镜像版本
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
@@ -190,25 +190,25 @@ jobs:
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |
           install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "$INFRA_DEPLOY_KEY" > "$HOME/.ssh/blog-infra"
-          chmod 600 "$HOME/.ssh/blog-infra"
+          printf '%s\n' "$INFRA_DEPLOY_KEY" > "$HOME/.ssh/k3s-infra"
+          chmod 600 "$HOME/.ssh/k3s-infra"
           ssh-keyscan -t ed25519 github.com >> "$HOME/.ssh/known_hosts"
-          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/blog-infra -o IdentitiesOnly=yes"
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/k3s-infra -o IdentitiesOnly=yes"
 
           infra_dir=$(mktemp -d)
-          git clone --depth=1 git@github.com:yinshengphy/blog-infra.git "$infra_dir"
+          git clone --depth=1 git@github.com:yinshengphy/k3s-infra.git "$infra_dir"
           cd "$infra_dir"
           sed -i -E \
-            "s#ghcr\.nju\.edu\.cn/yinshengphy/blog-rag-api:main-[0-9]{14}-[a-f0-9]{12}#ghcr.nju.edu.cn/yinshengphy/blog-rag-api:${IMAGE_TAG}#g" \
+            "s#ghcr\.nju\.edu\.cn/yinshengphy/blog-service:main-[0-9]{14}-[a-f0-9]{12}#ghcr.nju.edu.cn/yinshengphy/blog-service:${IMAGE_TAG}#g" \
             clusters/home/apps/blog.yaml
-          git config user.name "blog-rag-api-ci"
-          git config user.email "blog-rag-api-ci@yinshengphy.cn"
+          git config user.name "blog-service-ci"
+          git config user.email "blog-service-ci@yinshengphy.cn"
           git add clusters/home/apps/blog.yaml
           if git diff --cached --quiet; then
             echo "生产环境已经使用该镜像"
             exit 0
           fi
-          git commit -m "chore(blog-rag-api): 部署 ${IMAGE_TAG}"
+          git commit -m "chore(blog-service): 部署 ${IMAGE_TAG}"
           for attempt in 1 2 3; do
             git pull --rebase origin master
             if git push origin HEAD:master; then

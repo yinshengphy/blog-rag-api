@@ -1,4 +1,4 @@
-# blog-rag-api
+# blog-service
 
 `yinsheng的小站` 的 Spring Boot 智能助手 API。
 
