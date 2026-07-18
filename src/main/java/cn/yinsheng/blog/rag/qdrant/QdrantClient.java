@@ -65,6 +65,22 @@ public class QdrantClient {
     return true;
   }
 
+  public void recreateCollection(int vectorSize) {
+    try {
+      restClient.delete()
+          .uri(collectionUrl() + "?timeout=30")
+          .retrieve()
+          .toBodilessEntity();
+    } catch (HttpClientErrorException.NotFound ignored) {
+      log.info("Qdrant collection {} does not exist before rebuild", properties.qdrantCollection());
+    }
+    restClient.put()
+        .uri(collectionUrl())
+        .body(Map.of("vectors", Map.of("size", vectorSize, "distance", "Cosine")))
+        .retrieve()
+        .toBodilessEntity();
+  }
+
   public void deleteBySlug(String slug) {
     Map<String, Object> body = Map.of(
         "filter", Map.of(

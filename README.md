@@ -11,7 +11,8 @@
 - `blog_summary` 按顺序读取整篇文章并执行分层摘要。
 - `weather` 返回真实天气数据。
 - 返回回答、引用、相关文章和工具使用元数据。
-- 使用 `indexer` Spring profile（配置档）运行增量 Markdown 索引器。
+- 博客发布后通过内部接口增量索引新增、修改和删除的 Markdown 文章。
+- 提供受令牌保护的全量重建接口，不运行定时索引任务。
 
 ## 主要环境变量
 
@@ -23,6 +24,7 @@
 - `QDRANT_COLLECTION`：默认值 `blog_chunks`。
 - `BLOG_CONTENT_DIR`：索引器读取的 Markdown 源目录。
 - `INDEX_DB_PATH`：SQLite 索引状态数据库路径。
+- `INDEX_API_TOKEN`：调用内部索引接口的专用令牌。
 
 ## 本地构建
 
@@ -38,11 +40,20 @@ export QDRANT_URL=http://127.0.0.1:6333
 mvn spring-boot:run
 ```
 
-索引器：
+## 索引接口
+
+增量同步：
 
 ```bash
-export SPRING_PROFILES_ACTIVE=indexer
-export BLOG_CONTENT_DIR=C:/IdeaProjects/blog/src/content/posts
-export INDEX_DB_PATH=C:/IdeaProjects/blog/.rag/index-status.db
-mvn spring-boot:run
+curl -X POST \
+  -H "Authorization: Bearer ${INDEX_API_TOKEN}" \
+  http://127.0.0.1:8080/internal/index/sync
+```
+
+全量重建：
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer ${INDEX_API_TOKEN}" \
+  http://127.0.0.1:8080/internal/index/rebuild
 ```

@@ -23,6 +23,7 @@ rag:
   index-db-path: ${INDEX_DB_PATH:/data/blog-indexer/index-status.db}
   indexer-batch-size: ${INDEXER_BATCH_SIZE:6}
   indexer-chat-status-url: ${INDEXER_CHAT_STATUS_URL:http://blog-rag-api.blog.svc.cluster.local:8080/internal/status}
+  index-api-token: ${INDEX_API_TOKEN:}
   site-base-path: ${SITE_BASE_PATH:/}
   rate-limit-db-path: ${RATE_LIMIT_DB_PATH:/data/rate-limit.db}
   rate-limit-per-minute: ${RATE_LIMIT_PER_MINUTE:15}

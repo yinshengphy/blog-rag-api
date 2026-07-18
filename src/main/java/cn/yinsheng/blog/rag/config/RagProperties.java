@@ -22,6 +22,7 @@ public record RagProperties(
     String indexDbPath,
     int indexerBatchSize,
     String indexerChatStatusUrl,
+    String indexApiToken,
     String siteBasePath,
     String rateLimitDbPath,
     int rateLimitPerMinute,

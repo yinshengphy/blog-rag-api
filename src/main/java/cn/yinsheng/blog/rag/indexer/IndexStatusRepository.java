@@ -74,6 +74,16 @@ public class IndexStatusRepository {
     }
   }
 
+  public void clear(String dbPath) {
+    ensureSchema(dbPath);
+    try (Connection connection = connect(dbPath);
+         Statement statement = connection.createStatement()) {
+      statement.executeUpdate("delete from blog_index_status");
+    } catch (Exception ex) {
+      throw new IllegalStateException("Failed to clear index status", ex);
+    }
+  }
+
   private void ensureSchema(String dbPath) {
     try {
       Path path = Path.of(dbPath);
