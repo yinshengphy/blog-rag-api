@@ -67,12 +67,18 @@ public class BlogQaTool implements ToolRegistry.ToolHandler {
     if (chunks.isEmpty() || chunks.get(0).score() < 0.30) {
       return ToolResult.failure(call, "No sufficiently relevant blog content was found.");
     }
+    String currentSlug = context.pageContext() != null && context.pageContext().isBlogPost() ? context.pageContext().slug() : null;
     List<RetrievedChunk> evidence = distinctEvidence(chunks);
-    if ("RECOMMEND".equalsIgnoreCase(task)) {
+    if ("ALL_POSTS".equalsIgnoreCase(scope) || "RECOMMEND".equalsIgnoreCase(task) || (query != null && query.contains("相关文章"))) {
       evidence = evidence.stream().filter(chunk -> !isEssay(chunk)).toList();
     }
+    if (currentSlug != null && !currentSlug.isBlank()) {
+      final String activeSlug = currentSlug.trim();
+      if ("RECOMMEND".equalsIgnoreCase(task) || (query != null && query.contains("相关文章"))) {
+        evidence = evidence.stream().filter(chunk -> !activeSlug.equalsIgnoreCase(chunk.slug())).toList();
+      }
+    }
     List<Citation> citations = citationBuilder.build(evidence, "");
-    String currentSlug = context.pageContext() != null && context.pageContext().isBlogPost() ? context.pageContext().slug() : null;
     List<RelatedPost> related = relatedPostBuilder.build(evidence, currentSlug);
     StringBuilder content = new StringBuilder(taskInstruction(task));
     for (int i = 0; i < evidence.size(); i++) {
