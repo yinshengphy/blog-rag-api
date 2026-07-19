@@ -43,6 +43,8 @@ public class MarkdownChunker {
             post.contentHash(),
             chunkHash,
             post.tags(),
+            post.categories(),
+            post.description(),
             post.date(),
             post.updatedAt()
         ));

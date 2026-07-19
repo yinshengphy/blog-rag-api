@@ -28,7 +28,7 @@ public class CitationBuilder {
     Map<String, Citation> citations = new LinkedHashMap<>();
     for (int index = 0; index < chunks.size(); index++) {
       RetrievedChunk chunk = chunks.get(index);
-      String key = chunk.title() + ">" + chunk.section();
+      String key = chunk.url() + ">" + chunk.section();
       citations.putIfAbsent(key, new Citation(
           chunk.title(),
           chunk.section(),

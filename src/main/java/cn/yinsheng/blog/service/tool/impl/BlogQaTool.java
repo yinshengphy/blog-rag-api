@@ -14,6 +14,8 @@ import cn.yinsheng.blog.service.tool.ToolExecutionContext;
 import cn.yinsheng.blog.service.tool.ToolRegistry;
 import cn.yinsheng.blog.service.tool.ToolResult;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
@@ -65,11 +67,12 @@ public class BlogQaTool implements ToolRegistry.ToolHandler {
     if (chunks.isEmpty() || chunks.get(0).score() < 0.30) {
       return ToolResult.failure(call, "No sufficiently relevant blog content was found.");
     }
-    List<Citation> citations = citationBuilder.build(chunks, "");
-    List<RelatedPost> related = relatedPostBuilder.build(chunks);
+    List<RetrievedChunk> evidence = distinctEvidence(chunks);
+    List<Citation> citations = citationBuilder.build(evidence, "");
+    List<RelatedPost> related = relatedPostBuilder.build(evidence);
     StringBuilder content = new StringBuilder(taskInstruction(task));
-    for (int i = 0; i < chunks.size(); i++) {
-      RetrievedChunk chunk = chunks.get(i);
+    for (int i = 0; i < evidence.size(); i++) {
+      RetrievedChunk chunk = evidence.get(i);
       content.append("[Source ").append(i + 1).append("]\n")
           .append("Title: ").append(chunk.title()).append('\n')
           .append("Section: ").append(chunk.section()).append('\n')
@@ -82,6 +85,16 @@ public class BlogQaTool implements ToolRegistry.ToolHandler {
     metadata.put("scope", scope);
     if (slug != null) metadata.put("slug", slug);
     return ToolResult.success(call, content.toString(), citations, related, metadata);
+  }
+
+  private List<RetrievedChunk> distinctEvidence(List<RetrievedChunk> chunks) {
+    LinkedHashSet<String> keys = new LinkedHashSet<>();
+    List<RetrievedChunk> values = new ArrayList<>();
+    for (RetrievedChunk chunk : chunks) {
+      String key = chunk.url() + "|" + chunk.section();
+      if (keys.add(key)) values.add(chunk);
+    }
+    return List.copyOf(values);
   }
 
   private String normalizedTask(String value) {

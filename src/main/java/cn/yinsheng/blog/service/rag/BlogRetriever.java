@@ -5,8 +5,12 @@ import cn.yinsheng.blog.service.config.RagProperties;
 import cn.yinsheng.blog.service.model.RetrievedChunk;
 import cn.yinsheng.blog.service.qdrant.QdrantClient;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -43,8 +47,50 @@ public class BlogRetriever {
         candidates.putIfAbsent(chunk.chunkId(), chunk);
       }
     }
-    return blogReranker.rerank(question, candidates.values().stream().toList()).stream()
-        .limit(properties.topK())
-        .toList();
+    List<RetrievedChunk> ranked = blogReranker.rerank(question, candidates.values().stream().toList());
+    List<RetrievedChunk> selected = selectDiverse(ranked, slug, properties.topK());
+    return expandAdjacentContext(selected, candidates.values().stream().toList());
+  }
+
+  private List<RetrievedChunk> selectDiverse(List<RetrievedChunk> ranked, String slug, int limit) {
+    List<RetrievedChunk> selected = new ArrayList<>();
+    Map<String, Integer> perPost = new HashMap<>();
+    Set<String> sections = new HashSet<>();
+    for (RetrievedChunk chunk : ranked) {
+      String sectionKey = chunk.slug() + "|" + chunk.section();
+      if (!sections.add(sectionKey)) continue;
+      if ((slug == null || slug.isBlank()) && perPost.getOrDefault(chunk.slug(), 0) >= 2) continue;
+      selected.add(chunk);
+      perPost.merge(chunk.slug(), 1, Integer::sum);
+      if (selected.size() >= Math.max(1, limit)) break;
+    }
+    return List.copyOf(selected);
+  }
+
+  private List<RetrievedChunk> expandAdjacentContext(
+      List<RetrievedChunk> selected,
+      List<RetrievedChunk> allChunks
+  ) {
+    Map<String, RetrievedChunk> byPosition = new HashMap<>();
+    allChunks.forEach(chunk -> byPosition.put(chunk.slug() + "|" + chunk.chunkIndex(), chunk));
+    return selected.stream().map(chunk -> {
+      List<String> parts = new ArrayList<>();
+      RetrievedChunk previous = byPosition.get(chunk.slug() + "|" + (chunk.chunkIndex() - 1));
+      RetrievedChunk next = byPosition.get(chunk.slug() + "|" + (chunk.chunkIndex() + 1));
+      if (sameSection(previous, chunk)) parts.add(previous.content());
+      parts.add(chunk.content());
+      if (sameSection(next, chunk)) parts.add(next.content());
+      String expanded = String.join("\n\n", parts);
+      if (expanded.length() > 1800) expanded = expanded.substring(0, 1800);
+      return new RetrievedChunk(
+          chunk.score(), chunk.chunkId(), chunk.chunkIndex(), chunk.slug(), chunk.title(), chunk.section(),
+          chunk.headingPath(), chunk.url(), expanded, chunk.tags(), chunk.categories(), chunk.description(),
+          chunk.date(), chunk.updatedAt()
+      );
+    }).toList();
+  }
+
+  private boolean sameSection(RetrievedChunk candidate, RetrievedChunk selected) {
+    return candidate != null && candidate.section().equals(selected.section());
   }
 }

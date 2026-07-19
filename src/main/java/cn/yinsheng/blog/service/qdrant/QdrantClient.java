@@ -198,6 +198,8 @@ public class QdrantClient {
     payload.put("content_hash", chunk.contentHash());
     payload.put("chunk_hash", chunk.chunkHash());
     payload.put("tags", chunk.tags());
+    payload.put("categories", chunk.categories());
+    payload.put("description", chunk.description());
     payload.put("date", chunk.date());
     payload.put("updated_at", chunk.updatedAt());
     return payload;
@@ -224,9 +226,13 @@ public class QdrantClient {
         payload.path("slug").asText(),
         payload.path("title").asText(),
         payload.path("section").asText(),
+        payload.path("heading_path").asText(),
         payload.path("url").asText(),
         payload.path("content").asText(),
         readTags(payload.path("tags")),
+        readTags(payload.path("categories")),
+        payload.path("description").asText(),
+        payload.path("date").asText(),
         payload.path("updated_at").asText()
     );
   }

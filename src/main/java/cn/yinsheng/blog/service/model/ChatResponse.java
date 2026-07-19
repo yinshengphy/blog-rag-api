@@ -11,9 +11,10 @@ public record ChatResponse(
     String intent,
     List<String> usedSkills,
     List<String> usedTools,
+    List<String> suggestedQuestions,
     Map<String, Object> metadata
 ) {
   public ChatResponse(String answer, List<Citation> citations, List<RelatedPost> relatedPosts) {
-    this(answer, citations, relatedPosts, null, null, List.of(), List.of(), Map.of());
+    this(answer, citations, relatedPosts, null, null, List.of(), List.of(), List.of(), Map.of());
   }
 }

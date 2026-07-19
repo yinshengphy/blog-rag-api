@@ -27,19 +27,29 @@ public class BlogReranker {
     String normalizedQuestion = normalize(question);
     String title = normalize(chunk.title());
     String section = normalize(chunk.section());
+    String headingPath = normalize(chunk.headingPath());
+    String description = normalize(chunk.description());
     String content = normalize(chunk.content());
     double score = 0;
     if (!title.isBlank() && (normalizedQuestion.contains(title) || title.contains(normalizedQuestion))) score += 0.30;
     if (!section.isBlank() && (normalizedQuestion.contains(section) || section.contains(normalizedQuestion))) score += 0.40;
+    if (!headingPath.isBlank() && headingPath.contains(normalizedQuestion)) score += 0.28;
+    if (!description.isBlank() && description.contains(normalizedQuestion)) score += 0.20;
     if (!normalizedQuestion.isBlank() && content.contains(normalizedQuestion)) score += 0.20;
     for (String term : terms(normalizedQuestion)) {
       if (title.contains(term)) score += 0.07;
       if (section.contains(term)) score += 0.08;
+      if (headingPath.contains(term)) score += 0.05;
+      if (description.contains(term)) score += 0.035;
       if (content.contains(term)) score += 0.018;
     }
     for (String tag : chunk.tags()) {
       String normalizedTag = normalize(tag);
       if (!normalizedTag.isBlank() && normalizedQuestion.contains(normalizedTag)) score += 0.06;
+    }
+    for (String category : chunk.categories()) {
+      String normalizedCategory = normalize(category);
+      if (!normalizedCategory.isBlank() && normalizedQuestion.contains(normalizedCategory)) score += 0.08;
     }
     return Math.min(0.75, score);
   }
@@ -98,9 +108,13 @@ public class BlogReranker {
         chunk.slug(),
         chunk.title(),
         chunk.section(),
+        chunk.headingPath(),
         chunk.url(),
         chunk.content(),
         chunk.tags(),
+        chunk.categories(),
+        chunk.description(),
+        chunk.date(),
         chunk.updatedAt()
     );
   }

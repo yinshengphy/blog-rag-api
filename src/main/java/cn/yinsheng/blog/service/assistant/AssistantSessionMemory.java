@@ -6,14 +6,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import cn.yinsheng.blog.service.config.AssistantProperties;
+import cn.yinsheng.blog.service.model.ConversationMessage;
 import org.springframework.stereotype.Component;
 
 @Component
 public class AssistantSessionMemory {
-  private static final int MAX_MESSAGES = 4;
-  private static final int MAX_MESSAGE_CHARS = 1000;
-  private static final long TTL_MINUTES = 20;
+  private final AssistantProperties properties;
   private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
+
+  public AssistantSessionMemory(AssistantProperties properties) {
+    this.properties = properties;
+  }
 
   public List<Map<String, Object>> history(String sessionId) {
     if (sessionId == null || sessionId.isBlank()) return List.of();
@@ -30,10 +34,36 @@ public class AssistantSessionMemory {
     List<Map<String, Object>> messages = new ArrayList<>(history(sessionId));
     messages.add(Map.of("role", "user", "content", compact(userMessage)));
     messages.add(Map.of("role", "assistant", "content", compact(assistantMessage)));
-    if (messages.size() > MAX_MESSAGES) {
-      messages = new ArrayList<>(messages.subList(messages.size() - MAX_MESSAGES, messages.size()));
+    int maxMessages = Math.max(2, properties.getSessionMaxMessages());
+    if (messages.size() > maxMessages) {
+      messages = new ArrayList<>(messages.subList(messages.size() - maxMessages, messages.size()));
     }
-    sessions.put(sessionId, new SessionState(List.copyOf(messages), Instant.now().plus(TTL_MINUTES, ChronoUnit.MINUTES)));
+    removeExpired();
+    if (sessions.size() >= Math.max(10, properties.getSessionMaxEntries()) && !sessions.containsKey(sessionId)) {
+      sessions.entrySet().stream()
+          .min(Map.Entry.comparingByValue(java.util.Comparator.comparing(SessionState::expiresAt)))
+          .map(Map.Entry::getKey)
+          .ifPresent(sessions::remove);
+    }
+    sessions.put(sessionId, new SessionState(
+        List.copyOf(messages),
+        Instant.now().plus(Math.max(1, properties.getSessionTtlMinutes()), ChronoUnit.MINUTES)
+    ));
+  }
+
+  public List<Map<String, Object>> normalize(List<ConversationMessage> messages) {
+    if (messages == null || messages.isEmpty()) return List.of();
+    int maxMessages = Math.max(2, properties.getSessionMaxMessages());
+    List<ConversationMessage> tail = messages.size() <= maxMessages
+        ? messages
+        : messages.subList(messages.size() - maxMessages, messages.size());
+    List<Map<String, Object>> normalized = new ArrayList<>();
+    for (ConversationMessage message : tail) {
+      if (message == null || message.content() == null || message.content().isBlank()) continue;
+      String role = "assistant".equalsIgnoreCase(message.role()) ? "assistant" : "user";
+      normalized.add(Map.of("role", role, "content", compact(message.content())));
+    }
+    return List.copyOf(normalized);
   }
 
   public void clear(String sessionId) {
@@ -42,7 +72,13 @@ public class AssistantSessionMemory {
 
   private String compact(String value) {
     if (value == null) return "";
-    return value.length() <= MAX_MESSAGE_CHARS ? value : value.substring(0, MAX_MESSAGE_CHARS);
+    int maxChars = Math.max(100, properties.getSessionMaxMessageChars());
+    return value.length() <= maxChars ? value : value.substring(0, maxChars);
+  }
+
+  private void removeExpired() {
+    Instant now = Instant.now();
+    sessions.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
   }
 
   private record SessionState(List<Map<String, Object>> messages, Instant expiresAt) {

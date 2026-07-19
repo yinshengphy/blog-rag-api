@@ -8,8 +8,21 @@ public record BlogPost(
     String date,
     String updatedAt,
     List<String> tags,
+    List<String> categories,
     String description,
     String body,
     String contentHash
 ) {
+  public BlogPost(
+      String slug,
+      String title,
+      String date,
+      String updatedAt,
+      List<String> tags,
+      String description,
+      String body,
+      String contentHash
+  ) {
+    this(slug, title, date, updatedAt, tags, List.of(), description, body, contentHash);
+  }
 }

@@ -95,6 +95,7 @@ public class ChatController {
         );
         emitter.send(SseEmitter.event().name("citations").data(response.citations()));
         emitter.send(SseEmitter.event().name("relatedPosts").data(response.relatedPosts()));
+        emitter.send(SseEmitter.event().name("suggestedQuestions").data(response.suggestedQuestions()));
         emitter.send(SseEmitter.event()
             .name("done")
             .data(Map.of(

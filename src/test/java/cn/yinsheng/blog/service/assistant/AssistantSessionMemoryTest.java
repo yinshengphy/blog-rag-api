@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 class AssistantSessionMemoryTest {
   @Test
   void shouldKeepOnlyEphemeralRecentMessages() {
-    AssistantSessionMemory memory = new AssistantSessionMemory();
+    AssistantSessionMemory memory = new AssistantSessionMemory(new cn.yinsheng.blog.service.config.AssistantProperties());
     memory.remember("s1", "question", "answer");
 
     assertThat(memory.history("s1")).hasSize(2);

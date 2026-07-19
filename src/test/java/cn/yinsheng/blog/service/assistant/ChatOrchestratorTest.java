@@ -94,9 +94,11 @@ class ChatOrchestratorTest {
         registry,
         new ToolExecutor(registry),
         new AssistantProperties(),
-        new AssistantSessionMemory(),
+        new AssistantSessionMemory(new AssistantProperties()),
         new ObjectMapper(),
-        planner
+        planner,
+        new CitationNormalizer(),
+        new FollowUpQuestionGenerator(new AssistantProperties())
     );
   }
 

@@ -37,6 +37,8 @@ public class ChatOrchestrator {
   private final AssistantProperties properties;
   private final AssistantSessionMemory sessionMemory;
   private final ModelRoutePlanner routePlanner;
+  private final CitationNormalizer citationNormalizer;
+  private final FollowUpQuestionGenerator followUpQuestionGenerator;
   private final ObjectMapper objectMapper;
   private final String baseSystemPrompt;
 
@@ -47,7 +49,9 @@ public class ChatOrchestrator {
       AssistantProperties properties,
       AssistantSessionMemory sessionMemory,
       ObjectMapper objectMapper,
-      ModelRoutePlanner routePlanner
+      ModelRoutePlanner routePlanner,
+      CitationNormalizer citationNormalizer,
+      FollowUpQuestionGenerator followUpQuestionGenerator
   ) {
     this.aiComputeClient = aiComputeClient;
     this.toolRegistry = toolRegistry;
@@ -56,6 +60,8 @@ public class ChatOrchestrator {
     this.sessionMemory = sessionMemory;
     this.objectMapper = objectMapper;
     this.routePlanner = routePlanner;
+    this.citationNormalizer = citationNormalizer;
+    this.followUpQuestionGenerator = followUpQuestionGenerator;
     this.baseSystemPrompt = loadPrompt();
   }
 
@@ -80,7 +86,10 @@ public class ChatOrchestrator {
     String traceId = UUID.randomUUID().toString();
     List<Map<String, Object>> messages = new ArrayList<>();
     messages.add(Map.of("role", "system", "content", systemPrompt()));
-    List<Map<String, Object>> history = sessionMemory.history(request.sessionId());
+    List<Map<String, Object>> clientHistory = sessionMemory.normalize(request.history());
+    List<Map<String, Object>> history = clientHistory.isEmpty()
+        ? sessionMemory.history(request.sessionId())
+        : clientHistory;
     messages.addAll(history);
     String contextualQuestion = contextualQuestion(request.question(), request.pageContext());
     messages.add(Map.of("role", "user", "content", contextualQuestion));
@@ -94,14 +103,17 @@ public class ChatOrchestrator {
     String errorCode = "";
     ModelRoutePlanner.RoutePlan routePlan = routePlanner.plan(request, history);
     metadata.put("route", routePlan.route().name());
-    metaConsumer.accept(response("", "AGENT", usedTools, citations, relatedPosts, metadata));
+    metaConsumer.accept(response("", "AGENT", usedTools, citations, relatedPosts, List.of(), metadata));
 
     try {
       String fixedAnswer = fixedAnswer(routePlan.route());
       if (!fixedAnswer.isBlank()) {
         deltaConsumer.accept(fixedAnswer);
         sessionMemory.remember(request.sessionId(), contextualQuestion, fixedAnswer);
-        return response(fixedAnswer, "DIRECT", usedTools, citations, relatedPosts, metadata);
+        List<String> suggestions = followUpQuestionGenerator.generate(
+            routePlan.route(), request.pageContext(), citations, relatedPosts
+        );
+        return response(fixedAnswer, "DIRECT", usedTools, citations, relatedPosts, suggestions, metadata);
       }
       int loops = Math.max(1, Math.min(properties.getMaxToolCallsPerRequest(), 5));
       if (!routePlan.toolName().isBlank()) {
@@ -118,7 +130,7 @@ public class ChatOrchestrator {
         mergeRelatedPosts(relatedPosts, result.relatedPosts());
         metadata.putAll(result.metadata());
         messages.add(toolResultMessage(result));
-        metaConsumer.accept(response("", "TOOL", usedTools, citations, relatedPosts, metadata));
+        metaConsumer.accept(response("", "TOOL", usedTools, citations, relatedPosts, List.of(), metadata));
       }
       boolean nativeToolFallback = routePlan.route() == ModelRoutePlanner.Route.UNKNOWN;
       for (int loop = 0; loop <= loops; loop++) {
@@ -141,14 +153,27 @@ public class ChatOrchestrator {
           metadata.putAll(result.metadata());
           messages.add(toolResultMessage(result));
         }
-        metaConsumer.accept(response("", "TOOL", usedTools, citations, relatedPosts, metadata));
+        metaConsumer.accept(response("", "TOOL", usedTools, citations, relatedPosts, List.of(), metadata));
       }
       if (answer.isBlank()) {
         throw new IllegalStateException("Agent completed without an answer");
       }
-      answer = sanitizeCitationMarkers(answer, citations.size());
+      CitationNormalizer.Result normalized = citationNormalizer.normalize(answer, citations);
+      answer = normalized.answer();
+      citations = new ArrayList<>(normalized.citations());
       sessionMemory.remember(request.sessionId(), contextualQuestion, answer);
-      return response(answer, usedTools.isEmpty() ? "DIRECT" : "TOOL", usedTools, citations, relatedPosts, metadata);
+      List<String> suggestions = followUpQuestionGenerator.generate(
+          routePlan.route(), request.pageContext(), citations, relatedPosts
+      );
+      return response(
+          answer,
+          usedTools.isEmpty() ? "DIRECT" : "TOOL",
+          usedTools,
+          citations,
+          relatedPosts,
+          suggestions,
+          metadata
+      );
     } catch (RuntimeException ex) {
       errorCode = ex.getClass().getSimpleName();
       throw ex;
@@ -266,10 +291,21 @@ public class ChatOrchestrator {
       List<String> usedTools,
       List<Citation> citations,
       List<RelatedPost> relatedPosts,
+      List<String> suggestedQuestions,
       Map<String, Object> metadata
   ) {
     String intent = String.valueOf(metadata.getOrDefault("route", "UNKNOWN"));
-    return new ChatResponse(answer, List.copyOf(citations), List.copyOf(relatedPosts), mode, intent, List.of(), List.copyOf(usedTools), Map.copyOf(metadata));
+    return new ChatResponse(
+        answer,
+        List.copyOf(citations),
+        List.copyOf(relatedPosts),
+        mode,
+        intent,
+        List.of(),
+        List.copyOf(usedTools),
+        List.copyOf(suggestedQuestions),
+        Map.copyOf(metadata)
+    );
   }
 
   private String loadPrompt() {

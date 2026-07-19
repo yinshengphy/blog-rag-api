@@ -52,6 +52,7 @@ public class MarkdownPostReader {
         date,
         updatedAt,
         listValue(data.get("tags")),
+        listValue(data.get("categories")),
         stringValue(data.get("description"), ""),
         frontMatter.body().trim(),
         sha256(raw)
