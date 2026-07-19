@@ -69,12 +69,13 @@ public class BlogQaTool implements ToolRegistry.ToolHandler {
     }
     String currentSlug = context.pageContext() != null && context.pageContext().isBlogPost() ? context.pageContext().slug() : null;
     List<RetrievedChunk> evidence = distinctEvidence(chunks);
-    if ("ALL_POSTS".equalsIgnoreCase(scope) || "RECOMMEND".equalsIgnoreCase(task) || (query != null && query.contains("相关文章"))) {
+    boolean isRecommendation = "RECOMMEND".equalsIgnoreCase(task)
+        || (query != null && (query.contains("推荐") || query.contains("相关文章") || query.contains("延伸阅读")));
+
+    if (isRecommendation) {
       evidence = evidence.stream().filter(chunk -> !isEssay(chunk)).toList();
-    }
-    if (currentSlug != null && !currentSlug.isBlank()) {
-      final String activeSlug = currentSlug.trim();
-      if ("RECOMMEND".equalsIgnoreCase(task) || (query != null && query.contains("相关文章"))) {
+      if (currentSlug != null && !currentSlug.isBlank()) {
+        final String activeSlug = currentSlug.trim();
         evidence = evidence.stream().filter(chunk -> !activeSlug.equalsIgnoreCase(chunk.slug())).toList();
       }
     }
