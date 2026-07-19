@@ -69,8 +69,9 @@ public class BlogQaTool implements ToolRegistry.ToolHandler {
     }
     String currentSlug = context.pageContext() != null && context.pageContext().isBlogPost() ? context.pageContext().slug() : null;
     List<RetrievedChunk> evidence = distinctEvidence(chunks);
-    boolean isRecommendation = "RECOMMEND".equalsIgnoreCase(task)
-        || (query != null && (query.contains("推荐") || query.contains("相关文章") || query.contains("延伸阅读")));
+    boolean mentionsEssay = query != null && (query.contains("随笔") || query.contains("碎念"));
+    boolean isRecommendation = !mentionsEssay && ("RECOMMEND".equalsIgnoreCase(task)
+        || (query != null && (query.contains("相关文章") || query.contains("延伸阅读") || query.contains("推荐"))));
 
     if (isRecommendation) {
       evidence = evidence.stream().filter(chunk -> !isEssay(chunk)).toList();
