@@ -64,7 +64,7 @@ public class BlogQaTool implements ToolRegistry.ToolHandler {
       return ToolResult.failure(call, "The requested blog post was not found.");
     }
     List<RetrievedChunk> chunks = retriever.retrieve(query, slug);
-    if (chunks.isEmpty() || chunks.get(0).score() < 0.30) {
+    if (chunks.isEmpty() || chunks.get(0).score() < 0.18) {
       return ToolResult.failure(call, "No sufficiently relevant blog content was found.");
     }
     String currentSlug = context.pageContext() != null && context.pageContext().isBlogPost() ? context.pageContext().slug() : null;

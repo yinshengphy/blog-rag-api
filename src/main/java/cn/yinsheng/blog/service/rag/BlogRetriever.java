@@ -43,7 +43,7 @@ public class BlogRetriever {
     Map<String, RetrievedChunk> candidates = new LinkedHashMap<>();
     retrieved.forEach(chunk -> candidates.put(chunk.chunkId(), chunk));
     for (RetrievedChunk chunk : qdrantClient.listForRetrieval(slug)) {
-      if (blogReranker.lexicalScore(question, chunk) >= 0.08) {
+      if (blogReranker.lexicalScore(question, chunk) >= 0.04) {
         candidates.putIfAbsent(chunk.chunkId(), chunk);
       }
     }
